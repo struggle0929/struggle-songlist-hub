@@ -13,7 +13,7 @@
   {/if}
 </svelte:head>
 
-<section class="hero-card">
+<section class="hero-card" style={`--hero-background-blur: ${catalog.settings.appearance.backgroundBlur}px`}>
   {#if catalog.settings.background}
     <img
       src={catalog.settings.background}

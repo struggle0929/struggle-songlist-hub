@@ -11,6 +11,32 @@ import { UserFacingError } from '$lib/server/errors';
 import { listSettings, pageSettingsKeys, saveSettings, settingsAssetBucket } from '$lib/server/settings';
 import { supabaseAdmin } from '$lib/server/supabase';
 
+export function readBackgroundBlur(form: FormData) {
+  const raw = form.get('backgroundBlur');
+  if (raw === null) return undefined;
+  const value = typeof raw === 'string' && raw.trim() ? Number(raw) : NaN;
+  if (!Number.isInteger(value) || value < 0 || value > 40) throw new UserFacingError('背景模糊度应为 0～40 的整数。');
+  return value;
+}
+
+export async function saveBackgroundBlur(value: number) {
+  const existing = parseAppearance((await listSettings([pageSettingsKeys.appearance]))[pageSettingsKeys.appearance]);
+  existing.backgroundBlur = value;
+  await saveSettings({ [pageSettingsKeys.appearance]: JSON.stringify(existing) });
+}
+
+export async function saveHeaderText(form: FormData) {
+  const field = form.get('headerField');
+  if (field !== 'headerTitle' && field !== 'headerSubtitle') throw new UserFacingError('请选择要保存的标题。');
+  const raw = form.get(field);
+  const limit = field === 'headerTitle' ? 40 : 80;
+  if (typeof raw !== 'string' || !raw.trim() || raw.trim().length > limit)
+    throw new UserFacingError(`标题不能为空，最多 ${limit} 字。`);
+  const existing = parseAppearance((await listSettings([pageSettingsKeys.appearance]))[pageSettingsKeys.appearance]);
+  existing[field] = raw.trim();
+  await saveSettings({ [pageSettingsKeys.appearance]: JSON.stringify(existing) });
+}
+
 export async function saveAppearance(form: FormData) {
   const mode = form.get('cursorMode');
   if (!['inherit', 'system', 'static', 'animated'].includes(String(mode)))

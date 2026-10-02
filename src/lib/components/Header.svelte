@@ -5,7 +5,12 @@
   import Icon from '$lib/components/ui/Icon.svelte';
   import { applyTheme, persistTheme } from '$lib/theme';
 
-  let { isAdmin, icon = branding.icon }: { isAdmin: boolean; icon?: string } = $props();
+  let {
+    isAdmin,
+    icon = branding.icon,
+    title,
+    subtitle
+  }: { isAdmin: boolean; icon?: string; title: string; subtitle: string } = $props();
 
   let isDark = $state(browser && document.documentElement.classList.contains('dark'));
 
@@ -32,8 +37,8 @@
         >
       {/if}
       <span class="flex min-w-0 flex-col leading-tight">
-        <span class="text-sm font-semibold text-[var(--color-text)]">{branding.title}</span>
-        <span class="text-[11px] text-[var(--color-text-muted)]">{branding.subtitle}</span>
+        <span class="text-sm font-semibold [overflow-wrap:anywhere] break-words text-[var(--color-text)]">{title}</span>
+        <span class="text-[11px] [overflow-wrap:anywhere] break-words text-[var(--color-text-muted)]">{subtitle}</span>
       </span>
     </a>
 

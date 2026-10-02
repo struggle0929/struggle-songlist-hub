@@ -1,4 +1,4 @@
-import { saveAppearance } from '$lib/server/appearance';
+import { saveAppearance, saveHeaderText, readBackgroundBlur, saveBackgroundBlur } from '$lib/server/appearance';
 import { fail, redirect } from '@sveltejs/kit';
 
 import { inferSongLanguage } from '$lib/language';
@@ -42,6 +42,14 @@ export const load: PageServerLoad = async () => ({
 });
 
 export const actions: Actions = {
+  saveHeader: async ({ request }) => {
+    try {
+      await saveHeaderText(await request.formData());
+      return { kind: 'success' as const, adminMessage: '页面左上角文字已更新。' };
+    } catch (error) {
+      return fail(400, { kind: 'profile-error' as const, adminError: getErrorMessage(error) });
+    }
+  },
   previewMusic: async ({ request }) => {
     const value = (await request.formData()).get('musicInput');
     const musicInput = typeof value === 'string' ? value.trim() : '';
@@ -344,7 +352,14 @@ export const actions: Actions = {
   },
 
   saveProfile: async ({ request }) => {
-    const parsed = profileFormSchema.safeParse(await request.formData());
+    const formData = await request.formData();
+    let backgroundBlur: number | undefined;
+    try {
+      backgroundBlur = readBackgroundBlur(formData);
+    } catch (error) {
+      return fail(400, { kind: 'profile-error' as const, adminError: getErrorMessage(error) });
+    }
+    const parsed = profileFormSchema.safeParse(formData);
 
     if (!parsed.success) {
       return fail(400, {
@@ -378,6 +393,7 @@ export const actions: Actions = {
       if (hasBackgroundFile) {
         await saveSettingImage('background', bgFile);
       }
+      if (backgroundBlur !== undefined) await saveBackgroundBlur(backgroundBlur);
     } catch (error) {
       return fail(500, { kind: 'profile-error' as const, adminError: getErrorMessage(error) });
     }

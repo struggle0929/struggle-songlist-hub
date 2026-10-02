@@ -1,6 +1,6 @@
 <script lang="ts">
   import '../app.css';
-  import { getAutomaticCursorMode, hasCompleteCursorSet, resolveFavicon } from '$lib/appearance';
+  import { getAutomaticCursorMode, hasCompleteCursorSet, resolveFavicon, resolveHeaderText } from '$lib/appearance';
   import { branding, customCursorsEnabled, customCursors } from '$lib/branding';
 
   import { getCurrentYearInShanghai } from '$lib/datetime';
@@ -12,6 +12,7 @@
   import type { LayoutData } from './$types';
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
+  const headerText = $derived(resolveHeaderText(data.appearance, branding));
   const cursorConfig = $derived.by(() => {
     const appearance = data.appearance;
     if (appearance.mode === 'inherit') {
@@ -40,7 +41,12 @@
     <div class="absolute top-24 right-[-16rem] h-[34rem] w-[34rem] rounded-full bg-[#14b8a6]/10 blur-[120px]"></div>
   </div>
 
-  <Header isAdmin={data.isAdmin} icon={data.appearance.logo || branding.icon} />
+  <Header
+    isAdmin={data.isAdmin}
+    icon={data.appearance.logo || branding.icon}
+    title={headerText.title}
+    subtitle={headerText.subtitle}
+  />
 
   <main class="mx-auto w-full max-w-7xl flex-1 px-4 pt-8 pb-16 lg:px-6 lg:pt-10">
     {@render children()}

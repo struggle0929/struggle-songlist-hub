@@ -1,10 +1,12 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import type { SubmitFunction } from '@sveltejs/kit';
-  import { cursorLabels, cursorStates, staticStates, type Appearance } from '$lib/appearance';
+  import { cursorLabels, cursorStates, staticStates, resolveHeaderText, type Appearance } from '$lib/appearance';
+  import { branding } from '$lib/branding';
   import AppearanceUpload from './AppearanceUpload.svelte';
   import { pendingActions } from '$lib/pending.svelte';
   let { appearance }: { appearance: Appearance } = $props();
+  const headerText = $derived(resolveHeaderText(appearance, branding));
   let mode = $state<Appearance['mode']>('inherit');
   let pending = $state(false);
   let revision = $state(0);
@@ -37,6 +39,34 @@
         <div class="grid gap-3 sm:grid-cols-2">
           <AppearanceUpload name="logo" label="页面左上角图片替换" current={appearance.logo} />
           <AppearanceUpload name="favicon" label="网址图标（favicon）" current={appearance.favicon} />
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="space-y-3">
+            <label class="field-label">
+              <span>页面左上角小标题替换</span>
+              <input name="headerTitle" class="form-field" maxlength="40" value={headerText.title} />
+            </label>
+            <button
+              type="submit"
+              formaction="?/saveHeader"
+              name="headerField"
+              value="headerTitle"
+              class="button button-secondary button-full">确认小标题</button
+            >
+          </div>
+          <div class="space-y-3">
+            <label class="field-label">
+              <span>页面左上角副标题替换</span>
+              <input name="headerSubtitle" class="form-field" maxlength="80" value={headerText.subtitle} />
+            </label>
+            <button
+              type="submit"
+              formaction="?/saveHeader"
+              name="headerField"
+              value="headerSubtitle"
+              class="button button-secondary button-full">确认副标题</button
+            >
+          </div>
         </div>
         <p class="text-xs text-[var(--color-text-muted)]">
           图标：正方形 PNG，32～512 像素，不超过 512KB。网址图标建议 48×48 或

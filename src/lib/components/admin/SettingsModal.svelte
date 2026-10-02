@@ -47,6 +47,10 @@
 
   const avatarPreview = createImagePreview(() => settings.avatar);
   const backgroundPreview = createImagePreview(() => settings.background);
+  let backgroundBlur = $state(16);
+  $effect(() => {
+    if (open) backgroundBlur = settings.appearance.backgroundBlur;
+  });
 
   onDestroy(() => {
     avatarPreview.clear();
@@ -138,7 +142,12 @@
                 <div
                   class="mt-2 h-36 w-full overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-muted)]"
                 >
-                  <img src={backgroundPreview.preview} alt="背景预览" class="h-full w-full object-cover" />
+                  <img
+                    src={backgroundPreview.preview}
+                    alt="背景预览"
+                    class="h-full w-full object-cover"
+                    style={`filter: blur(${backgroundBlur}px) saturate(1.1); transform: scale(1.1)`}
+                  />
                 </div>
               {/if}
               <input
@@ -147,6 +156,18 @@
                 accept="image/*"
                 class="form-field"
                 onchange={backgroundPreview.onChange}
+              />
+            </label>
+            <label class="field-label mt-4">
+              <span class="flex items-center justify-between">背景模糊度 <output>{backgroundBlur}px</output></span>
+              <input
+                type="range"
+                name="backgroundBlur"
+                min="0"
+                max="40"
+                step="1"
+                bind:value={backgroundBlur}
+                class="w-full accent-[var(--color-accent)]"
               />
             </label>
           </div>

@@ -83,7 +83,9 @@ async function test(name, run) {
   console.log('PASS', name);
 }
 try {
-  const { saveAppearance } = await server.ssrLoadModule('/src/lib/server/appearance.ts');
+  const { saveAppearance, saveHeaderText, saveBackgroundBlur, readBackgroundBlur } = await server.ssrLoadModule(
+    '/src/lib/server/appearance.ts'
+  );
   const { cursorStates, staticStates, parseAppearance, getAutomaticCursorMode, resolveFavicon } =
     await server.ssrLoadModule('/src/lib/appearance.ts');
   await test('missing active cursor images are rejected before upload', async () => {
@@ -178,6 +180,41 @@ try {
     appearance.favicon = '';
     assert.equal(resolveFavicon(appearance, 'deployment.png'), 'deployment.png');
     assert.equal(resolveFavicon(appearance, ''), '/favicon.svg');
+  });
+  await test('header defaults, independent text saves and blur preserve cursor and asset settings', async () => {
+    assert.equal(parseAppearance().headerTitle, '');
+    const { resolveHeaderText } = await server.ssrLoadModule('/src/lib/appearance.ts');
+    const branding = { title: 'Siro的歌单', subtitle: 'Siro的歌单与愿望单管理' };
+    assert.deepEqual(resolveHeaderText(parseAppearance(), branding), branding);
+    assert.deepEqual(resolveHeaderText(parseAppearance('{"headerTitle":"新标题"}'), branding), {
+      title: '新标题',
+      subtitle: branding.subtitle
+    });
+    assert.equal(parseAppearance().backgroundBlur, 16);
+    state.value = JSON.stringify({ ...parseAppearance(), logo: 'appearance/keep.png', mode: 'system' });
+    const input = new FormData();
+    input.set('headerField', 'headerTitle');
+    input.set('headerTitle', ' 新标题 ');
+    await saveHeaderText(input);
+    input.set('headerField', 'headerSubtitle');
+    input.set('headerSubtitle', '新副标题');
+    await saveHeaderText(input);
+    await saveBackgroundBlur(0);
+    const saved = parseAppearance(state.value);
+    assert.equal(saved.headerTitle, '新标题');
+    assert.equal(saved.headerSubtitle, '新副标题');
+    assert.equal(saved.backgroundBlur, 0);
+    assert.equal(saved.logo, 'appearance/keep.png');
+    assert.equal(saved.mode, 'system');
+    input.set('headerSubtitle', '');
+    await assert.rejects(() => saveHeaderText(input));
+    for (const bad of ['', '-1', '41', '1.5', 'bad']) {
+      input.set('backgroundBlur', bad);
+      assert.throws(() => readBackgroundBlur(input));
+    }
+    input.set('backgroundBlur', '40');
+    assert.equal(readBackgroundBlur(input), 40);
+    assert.equal(parseAppearance('{"backgroundBlur":999}').backgroundBlur, 16);
   });
   console.log(`${passed} appearance tests passed.`);
 } finally {

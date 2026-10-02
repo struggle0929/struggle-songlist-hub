@@ -14,13 +14,36 @@ export const staticStates = cursorStates.slice(0, 3);
 export const defaultFavicon = '/favicon.svg';
 export type CursorAsset = { file: string; hotspot: [number, number] };
 export type Appearance = {
+  headerTitle: string;
+  headerSubtitle: string;
+  backgroundBlur: number;
   logo: string;
   favicon: string;
   mode: CursorMode | 'inherit';
   static: Partial<Record<CursorState, CursorAsset>>;
   animated: Partial<Record<CursorState, CursorAsset>>;
 };
-export const emptyAppearance = (): Appearance => ({ logo: '', favicon: '', mode: 'inherit', static: {}, animated: {} });
+// Empty overrides retain each deployment's configured branding.
+export const defaultHeaderTitle = '';
+export const defaultHeaderSubtitle = '';
+export const defaultBackgroundBlur = 16;
+export const emptyAppearance = (): Appearance => ({
+  headerTitle: defaultHeaderTitle,
+  headerSubtitle: defaultHeaderSubtitle,
+  backgroundBlur: defaultBackgroundBlur,
+  logo: '',
+  favicon: '',
+  mode: 'inherit',
+  static: {},
+  animated: {}
+});
+
+export function resolveHeaderText(appearance: Appearance, defaults: { title: string; subtitle: string }) {
+  return {
+    title: appearance.headerTitle || defaults.title,
+    subtitle: appearance.headerSubtitle || defaults.subtitle
+  };
+}
 
 export function hasCompleteCursorSet(appearance: Appearance, mode: UploadedCursorMode): boolean {
   const required = mode === 'static' ? staticStates : cursorStates;
@@ -43,6 +66,15 @@ export function parseAppearance(value: string | undefined): Appearance {
   try {
     const raw = JSON.parse(value);
     if (!raw || typeof raw !== 'object') return result;
+    for (const [key, limit] of [
+      ['headerTitle', 40],
+      ['headerSubtitle', 80]
+    ] as const) {
+      if (typeof raw[key] === 'string' && raw[key].trim() && raw[key].trim().length <= limit)
+        result[key] = raw[key].trim();
+    }
+    if (Number.isInteger(raw.backgroundBlur) && raw.backgroundBlur >= 0 && raw.backgroundBlur <= 40)
+      result.backgroundBlur = raw.backgroundBlur;
     for (const key of ['logo', 'favicon'] as const) {
       if (typeof raw[key] === 'string') result[key] = raw[key];
     }
