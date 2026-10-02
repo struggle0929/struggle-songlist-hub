@@ -1,121 +1,115 @@
-# struggle-songlist-qk
+# struggle-songlist-hub
 
-通用单主播歌单。支持点击复制、筛选条件内随机选歌、手机端随机不跳转、愿望单直达、置顶置底、后台状态搜索、网易云/酷狗/QQ 音乐导入及移动端字体修复。
+多主播共用歌单平台的开发仓库，基于 SvelteKit、Svelte 和 Supabase。目标为 **一个 Vercel 项目 + 一个 Supabase 项目 + 同域名下不同主播路径**，统一更新程序，每位主播拥有独立歌曲、愿望单、页面配置和后台授权。
 
-默认不含主播个人素材，使用系统鼠标指针。导航标题、副标题的默认值和网页描述通过部署环境变量配置；导航文字、首页标题、头像、背景及模糊度、Bilibili 地址、页面图标及静态/动态鼠标指针可在后台设置。多位主播共享代码，每位主播使用独立部署与独立数据库。
+**当前阶段：代码复制完成，尚未实现多主播隔离。** 2026 年 10 月 3 日从 [struggle-songlist-qk](https://github.com/struggle0929/struggle-songlist-qk) 的 `91f58931ca4863765e94c3be0e2b30be8ec204eb` 导入代码及其 7 个提交。本次只更改项目名称和文档，`src/`、`static/`、`scripts/`、`supabase/` 与来源提交一致。
 
-详细步骤见 [多主播部署指南](DEPLOYMENT.md)，配置示例见 [.env.example](.env.example)。
+## 域名与目标入口
 
-功能更新记录见 [更新日志](更新日志.md)。
+预计使用 `xs0929.cn`，以主播稳定英文标识作为路径：
 
-## 页面文字与背景设置
+| 入口       | 目标地址（尚未实现）                |
+| ---------- | ----------------------------------- |
+| 歌单目录   | `https://xs0929.cn/`                |
+| Siro0 歌单 | `https://xs0929.cn/siro0`           |
+| 薰薰兔歌单 | `https://xs0929.cn/xunxuntu`        |
+| 主播后台   | `https://xs0929.cn/siro0/admin`     |
+| 统一登录   | `https://xs0929.cn/admin/login`     |
+| 平台管理   | `https://xs0929.cn/admin/streamers` |
 
-在“后台管理 → 页面配置”的图标区域下方，可分别填写“页面左上角小标题替换”和“页面左上角副标题替换”，点击对应的确认按钮独立保存。小标题最多 40 字，副标题最多 80 字，不能为空；保存后公开页面和后台导航同时生效，长文字支持换行。
+`https://主播名称/xs0929.cn` 会把主播名称当作主机名，不是预期的地址。路径方案为 `https://xs0929.cn/主播标识`；子域名方案为 `https://主播标识.xs0929.cn`。本仓库按本次指定的路径方案规划，子域名识别留作可选扩展。
 
-未保存导航文字时沿用 `PUBLIC_SITE_TITLE` 和 `PUBLIC_SITE_SUBTITLE`，兼容已有站点的品牌配置。后台保存的导航文字优先于环境变量；不影响首页头像下方主标题、浏览器标题和页脚标题。
+当前实际入口仍为前台 `/`、登录 `/admin/login`、后台 `/admin`，没有 `/siro0` 等主播路由。
 
-背景图片下方支持 0～40px 模糊度滑条，默认 16px，0px 表示不模糊。已有图片和新选择图片均支持实时预览，点击“保存配置”后应用到首页。保存导航文字或背景模糊度会保留已有图标与鼠标指针设置，新配置随数据库备份导出和恢复。
+## 保留功能
 
-## 歌曲软件导入
+- 搜索、语言与标签筛选、排序、状态展示、点击复制、筛选内随机选歌。
+- 手机布局与字体适配、手机随机不跳转、愿望单直达、置顶置底。
+- 后台添加、编辑、删除、批量标签、已有标签选择、状态搜索与导入次序排序。
+- 网易云、酷狗、QQ 音乐单曲及公开歌单分享链接识别、预览、选择导入，不下载音频。
+- 愿望单提交、处理及请求限流。
+- 首页标题、导航小标题与副标题、Bilibili 地址、头像、背景及 0～40px 模糊度。
+- 导航图标、favicon、静态与动态鼠标指针、热点设置和自动回退。
+- JSON 备份与恢复，包括歌曲、愿望单、页面配置及引用素材，不包含管理员账号。
+- 本地只读演示与现有回归测试脚本。
 
-后台“添加歌曲 → 歌曲软件导入”支持网易云、酷狗和 QQ 音乐的单曲与公开歌单分享链接，包括官方分享短链接。粘贴链接或带链接的分享文字后点击“解析链接”，自动识别平台与单曲/歌单类型，无需手动选择平台。
+## 当前权限与数据库边界
 
-解析后在统一预览中核对歌曲名、原唱、语言、状态及标签，勾选需要的歌曲并确认导入。关闭预览后保留原分享内容，方便再次解析。统一入口不接受无法确定平台的纯数字 ID，请复制官方分享链接。
+当前会话只记录管理员状态，没有用户 ID 和主播授权；任何可通过当前 Supabase Auth 登录的账号均可管理整个歌单。歌曲、愿望单没有主播归属，页面设置为全局配置，重置和恢复覆盖整库业务数据。
 
-单次最多导入 5000 首歌曲，仅读取歌曲信息，不下载音频。私密歌单、失效链接或平台访问限制可能导致解析失败；导入前请核对预览数量，酷狗可读取范围取决于官方分享页面返回的列表。QQ 音乐分批读取时会检查数量，避免静默导入不完整歌单。
+当前版本只适合单主播基线验证。不要将多个主播备份依次恢复到同一数据库，也不要在 Siro0 正式项目执行初始化、重置或恢复来试验多主播。全部隔离完成并验证后再迁移。
 
-## 后台标签与排序
+完整修改清单见 [多主播改造计划](MULTI_TENANT_PLAN.md)，部署与迁移顺序见 [部署说明](DEPLOYMENT.md)，本次实际修改和来源历史见 [更新日志](更新日志.md)。
 
-- 手动添加、编辑歌曲及批量追加标签时，可以勾选已有标签，也可以输入新标签，支持中英文逗号分隔并自动去重。
-- 歌曲列表勾选多首歌曲后，可统一追加标签；支持本页全选及全选过滤结果，保留原有标签，每首最多 8 个。
-- 三个平台的单曲和歌单导入预览支持统一追加标签，仅应用于勾选导入的歌曲，并保留每首歌曲单独填写的标签。
-- 后台支持默认排序、歌曲名排序、导入次序排序及升降序切换。导入次序降序可优先查看最近入库的歌曲。
-- 编辑歌曲保存后保留表单内容，收起并重新展开无需刷新。
+## 本地开发
 
-2026 年 10 月 2 日的标签、排序、音乐导入、导航文字及背景模糊度更新无需执行 SQL 迁移，已有站点更新代码并重新部署即可。首次启用此前的页面外观或数据库恢复功能时，仍需按部署指南执行对应迁移。
+使用 Node.js 20.19+ 或 22.12+，本次初始化环境为 Node.js 22.20.0。
 
-基于 QingKong Songlist，保留原作者声明及 LICENSE。
-
-SvelteKit + Supabase 搭建的单主播歌单站。观众查歌、筛选、提交愿望单；主播后台管理曲库、导入网易云、酷狗和 QQ 音乐歌曲、处理请求。
-
-前台 `/` · 后台登录 `/admin/login` · 后台 `/admin`
-
-## 快速开始
-
-```bash
-npm install
-cp .env.example .env   # 填入下方环境变量
-# 在 Supabase SQL Editor 执行 supabase/schema.sql
-npm run dev
+```powershell
+Set-Location D:\Github\struggle-songlist-hub
+npm ci
+Copy-Item .env.example .env
+npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-要求 Node 20.19+ 或 22.12+（Vite 8）。
+首次复制 `.env` 后填写配置，已有 `.env` 时不要覆盖。源仓库的 `.env`、依赖目录、缓存及云平台绑定未复制。
+
+没有测试数据库时，可在本地 `.env` 设置：
+
+```dotenv
+PUBLIC_SUPABASE_URL=https://example.supabase.co
+PUBLIC_SUPABASE_PUBLISHABLE_KEY=local-demo-publishable-key
+SUPABASE_SECRET_KEY=local-demo-secret-key
+AUTH_SECRET=local-demo-only-replace-before-real-use
+LOCAL_DEMO=true
+```
+
+演示仅在开发服务器生效，使用六首示例歌曲并阻止提交和登录。生产构建不启用演示；后台写操作须使用独立测试数据库或本地 Supabase。
 
 ## 环境变量
 
-| 变量                              | 说明                                                     |
-| --------------------------------- | -------------------------------------------------------- |
-| `PUBLIC_SUPABASE_URL`             | Supabase 项目 URL                                        |
-| `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key，格式为 `sb_publishable_...`             |
-| `SUPABASE_SECRET_KEY`             | Secret key，格式为 `sb_secret_...`，仅服务端使用         |
-| `AUTH_SECRET`                     | 用于签名 admin session cookie 的随机串，建议至少 32 字节 |
+| 变量                                              | 用途                                           |
+| ------------------------------------------------- | ---------------------------------------------- |
+| `PUBLIC_SUPABASE_URL`                             | Supabase 项目 URL                              |
+| `PUBLIC_SUPABASE_PUBLISHABLE_KEY`                 | 可公开的 publishable key                       |
+| `SUPABASE_SECRET_KEY`                             | 仅服务端使用的 secret key                      |
+| `AUTH_SECRET`                                     | 管理员会话签名随机串，真实环境建议至少 32 字节 |
+| `LOCAL_DEMO`                                      | 开发服务器只读演示                             |
+| `PUBLIC_SITE_TITLE` / `PUBLIC_SITE_SUBTITLE`      | 部署默认标题与导航副标题                       |
+| `PUBLIC_SITE_DESCRIPTION` / `PUBLIC_SITE_TAGLINE` | 部署网页描述与首页说明                         |
+| `PUBLIC_SITE_ICON`                                | 部署默认图标                                   |
+| `PUBLIC_CUSTOM_CURSORS` / `PUBLIC_CURSOR_*`       | 可选部署默认动态指针                           |
 
-生成 `AUTH_SECRET` 示例：
+完整示例见 [.env.example](.env.example)。当前品牌变量作用于整个部署；未来只作为平台默认值，各主播配置按主播 ID 读取。本次不新增尚未生效的主播环境变量。
 
-```bash
+真实环境生成会话密钥：
+
+```powershell
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-把输出结果填入本地 `.env` 和部署平台环境变量即可。
+## 常用脚本
 
-管理员登录走 Supabase Auth。**任何能在 Supabase 登录的账号都能进后台**，请只在 Auth 中创建受信任的账号。
+| 命令                                      | 用途                           |
+| ----------------------------------------- | ------------------------------ |
+| `npm run dev`                             | 开发服务器                     |
+| `npm run check`                           | TypeScript 与 Svelte 检查      |
+| `npm run build` / `npm run preview`       | 生产构建 / 构建预览            |
+| `npm run test:appearance`                 | 页面外观与素材存储回归         |
+| `npm run test:backup`                     | 备份恢复与素材回归             |
+| `npm run test:tags`                       | 标签、批量追加及排序回归       |
+| `npm run test:music-import`               | 音乐链接与解析回归             |
+| `npm run db:types`                        | 生成当前 `.env` 对应数据库类型 |
+| `npm run format` / `npm run format:check` | 格式化 / 格式检查              |
 
-## 脚本
+四项回归使用模拟数据库或请求。`scripts/test-*-ui.mjs` 浏览器脚本需额外准备 Playwright、本地服务器及测试配置，本次不新增浏览器依赖。Husky 提交钩子对暂存文件执行 Prettier。
 
-| 命令                        | 作用                                       |
-| --------------------------- | ------------------------------------------ |
-| `npm run dev`               | 启动开发服务器                             |
-| `npm run build`             | 生产构建                                   |
-| `npm run preview`           | 预览生产构建                               |
-| `npm run check`             | 类型 + Svelte 检查                         |
-| `npm run test:appearance`   | 页面图标与鼠标指针存储测试                 |
-| `npm run test:backup`       | 数据备份、恢复及素材切换测试               |
-| `npm run test:tags`         | 标签解析、批量追加、导入与排序回归测试     |
-| `npm run test:music-import` | 音乐平台识别、分享链接与解析回归测试       |
-| `npm run db:types`          | 从 `.env` 对应 Supabase 项目生成数据库类型 |
-| `npm run format`            | Prettier 格式化整个仓库                    |
-| `npm run format:check`      | 只检查格式不写入                           |
+## 统一更新与新增主播
 
-提交时 husky pre-commit 会自动跑 `lint-staged`，对 staged 文件执行 `prettier --write`。`npm install` 会自动激活 hook。
+多主播版完成后，程序更新并部署一次，所有主播同时获得更新；数据库结构变化仍须在共享项目执行一次迁移。
 
-首次生成数据库类型前，先执行 `npx supabase login` 登录 Supabase CLI。之后 `npm run db:types` 会从 `.env` 的 `PUBLIC_SUPABASE_URL` 自动提取 project ref，并更新 `src/lib/server/database.types.ts`。
+新增主播的目标流程为：平台管理员在后台创建歌单、配置标识、创建或选择账号、分配权限，无需新增仓库、Vercel 或 Supabase 项目。此管理流程尚未实现。
 
-## 随时进行本地测试
+## 来源与许可证
 
-在项目目录配置好 `.env` 后执行 `npm run dev -- --host 127.0.0.1 --port 5173`，打开终端显示的本地地址（通常为 `http://127.0.0.1:5173`）。终端必须保持运行；退出终端或重启电脑后，重新执行命令即可恢复测试地址。
-
-仅预览前台时可按部署指南启用 `LOCAL_DEMO=true`。需要测试后台添加、编辑、导入及恢复时，使用独立测试数据库并设置 `LOCAL_DEMO=false`；本地连接正式数据库时，后台操作也会修改正式数据。
-
-开发缓存和自动测试缓存已分开，避免测试运行影响本地页面交互。浏览器回归脚本 `scripts/test-tags-ui.mjs` 需要另行安装 Playwright、启动本地服务，并准备含歌曲及已有标签的测试数据库；脚本会拦截并模拟所有 POST 请求。运行方式为 `node --env-file=.env scripts/test-tags-ui.mjs`。
-
-统一音乐导入的浏览器回归脚本运行方式为 `node --env-file=.env scripts/test-music-import-ui.mjs`，同样需要 Playwright 和本地服务，使用模拟 POST 响应检查平台入口、预览、链接保留与手机布局。
-
-页面配置浏览器回归脚本为 `node --env-file=.env scripts/test-page-settings-ui.mjs`，检查导航文字独立提交、背景模糊实时预览及手机布局，同样使用模拟 POST 响应。
-
-## 部署
-
-使用 `@sveltejs/adapter-auto`，Vercel / Netlify / Cloudflare Pages 等均可。部署前：
-
-- 托管平台配置全部环境变量
-- 在生产 Supabase 执行 `supabase/schema.sql`
-- 在 Supabase Auth 中至少创建一个管理员账号
-
-## 技术栈
-
-SvelteKit 2 · Svelte 5 · Vite 8 · Tailwind CSS 4 · Supabase · Zod 4 · `@neteasecloudmusicapienhanced/api`
-
-## 许可证
-
-本项目采用 `Parity Public License 7.0.0` 授权，详见根目录 `LICENSE`。
-
-如果你使用本软件开发、运行或分析其他软件，则相关软件也需要按照协议要求开放共享。
+基于 QingKong Songlist 和 `struggle-songlist-qk`，完整保留原作者声明及 [Parity Public License 7.0.0](LICENSE)。公开源码并保留通用库提交历史。原单主播库与个人歌单仓库不会自动跟随本仓库更新。
