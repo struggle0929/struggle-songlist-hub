@@ -1,4 +1,5 @@
 import type { ImportPreview } from '$lib/types';
+import type { MusicProvider } from '$lib/music-import';
 
 export type AdminSuccessResult = {
   kind: 'success';
@@ -17,6 +18,8 @@ export type AdminErrorResult = {
 };
 
 export type AdminPreviewParseErrorResult = {
+  musicInput?: string;
+  provider?: MusicProvider;
   kind: 'preview-parse-error';
   adminError: string;
   songImport?: { songInput: string };
@@ -58,14 +61,25 @@ export const hasImportPreview = (
 export const startsOnNeteasePanel = (form: AdminActionForm) =>
   form?.kind === 'preview-ready' || form?.kind === 'preview-import-error' || form?.kind === 'preview-parse-error';
 
+export const getImportProvider = (form: AdminActionForm): MusicProvider =>
+  hasImportPreview(form)
+    ? (form.importPreview.provider ?? 'netease')
+    : form?.kind === 'preview-parse-error'
+      ? (form.provider ?? 'netease')
+      : 'netease';
+
 export const getSongInputEcho = (form: AdminActionForm) =>
-  form?.kind === 'preview-parse-error' ? (form.songImport?.songInput ?? '') : '';
+  form?.kind === 'preview-parse-error'
+    ? (form.songImport?.songInput ?? '')
+    : hasImportPreview(form) && form.importPreview.sourceKind === 'song'
+      ? form.importPreview.sourceInput
+      : '';
 
 export const getPlaylistInputEcho = (form: AdminActionForm) => {
   if (form?.kind === 'preview-parse-error' && form.playlistImport) {
     return form.playlistImport.playlistInput;
   }
-  if (form?.kind === 'preview-ready' || form?.kind === 'preview-import-error') {
+  if (hasImportPreview(form) && form.importPreview.sourceKind === 'playlist') {
     return form.importPreview.sourceInput;
   }
   return '';

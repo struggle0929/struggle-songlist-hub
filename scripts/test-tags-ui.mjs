@@ -35,7 +35,7 @@ try {
     if (route.request().method() !== 'POST') return route.continue();
     submissions++;
     console.log('Mock POST', new URL(route.request().url()).search);
-    const isPreview = route.request().url().includes('previewSong');
+    const isPreview = route.request().url().includes('previewMusic');
     if (route.request().url().includes('saveSong')) {
       savedTags.push(new URLSearchParams(route.request().postData()).get('tagsInput'));
     }
@@ -119,9 +119,10 @@ try {
   await page.waitForFunction(
     () => document.querySelector('form[action="?/bulkTagSongs"] input[name="tagsInput"]').value === ''
   );
-  await page.getByRole('tab', { name: '网易云导入', exact: true }).click();
-  await page.locator('[name="songInput"]').fill('123');
-  await page.getByRole('button', { name: '解析单曲', exact: true }).click();
+  await page.goto('http://127.0.0.1:5173/admin', { waitUntil: 'networkidle' });
+  await page.getByRole('tab', { name: '歌曲软件导入', exact: true }).click();
+  await page.locator('[name="musicInput"]').fill('https://music.163.com/#/song?id=123');
+  await page.getByRole('button', { name: '解析链接', exact: true }).click();
   const shared = page.locator('[name="sharedTagsInput"]');
   await shared.waitFor();
   await shared.locator('..').locator('..').locator('[aria-label="已有标签"] input').first().check();

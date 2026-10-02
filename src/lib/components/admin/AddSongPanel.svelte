@@ -1,7 +1,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { isPending, pendingEnhance } from '$lib/pending.svelte';
-  import { getPlaylistInputEcho, getSongInputEcho, type AdminActionForm } from '$lib/admin/result';
+  import { hasImportPreview, type AdminActionForm } from '$lib/admin/result';
   import Select from '$lib/components/ui/Select.svelte';
   import TagInput from './TagInput.svelte';
   import { songLanguageItems, songStatusItems } from '$lib/select-options';
@@ -17,17 +17,22 @@
     tags?: string[];
   } = $props();
 
-  const songInputEcho = $derived(getSongInputEcho(form));
-  const playlistInputEcho = $derived(getPlaylistInputEcho(form));
+  const musicInputEcho = $derived(
+    hasImportPreview(form)
+      ? form.importPreview.sourceInput
+      : form?.kind === 'preview-parse-error'
+        ? (form.musicInput ?? '')
+        : ''
+  );
 </script>
 
 <div class="panel-card min-w-0">
   <h2 class="text-lg font-semibold text-[var(--color-text)]">添加歌曲</h2>
 
   <Tabs.Root bind:value={active} class="mt-5 space-y-4">
-    <Tabs.List class="admin-tabs-list inline-flex">
+    <Tabs.List class="admin-tabs-list grid grid-cols-2">
       <Tabs.Trigger value="manual" class="admin-tab-trigger">手动填写</Tabs.Trigger>
-      <Tabs.Trigger value="netease" class="admin-tab-trigger">网易云导入</Tabs.Trigger>
+      <Tabs.Trigger value="music" class="admin-tab-trigger">歌曲软件导入</Tabs.Trigger>
     </Tabs.List>
 
     <Tabs.Content value="manual">
@@ -79,51 +84,33 @@
       </form>
     </Tabs.Content>
 
-    <Tabs.Content value="netease" class="space-y-5">
-      <form method="POST" action="?/previewSong" class="space-y-3" use:enhance={pendingEnhance('preview-song')}>
+    <Tabs.Content value="music" class="space-y-4">
+      <p class="text-sm leading-6 text-[var(--color-text-secondary)]">
+        支持歌曲软件：网易云、酷狗、QQ音乐。在软件点击分享单曲或者歌单，复制链接。
+      </p>
+      <form
+        method="POST"
+        action="?/previewMusic"
+        class="space-y-3"
+        use:enhance={pendingEnhance('preview-music', undefined, { reset: false })}
+      >
         <label class="field-label">
-          <span>单曲链接或 ID</span>
+          <span>单曲或歌单分享链接</span>
           <input
-            name="songInput"
+            name="musicInput"
             class="form-field"
-            value={songInputEcho}
-            placeholder="https://music.163.com/#/song?id=..."
+            value={musicInputEcho}
+            required
+            maxlength="4000"
+            placeholder="粘贴单曲或歌单分享链接"
           />
         </label>
         <button
           type="submit"
           class="button button-secondary button-full"
-          disabled={isPending('preview-song')}
-          data-pending={isPending('preview-song') || undefined}
+          disabled={isPending('preview-music')}
+          data-pending={isPending('preview-music') || undefined}>解析链接</button
         >
-          解析单曲
-        </button>
-      </form>
-
-      <div class="relative flex items-center">
-        <div class="flex-1 border-t border-[var(--color-border-soft)]"></div>
-        <span class="px-3 text-xs text-[var(--color-text-muted)]">或</span>
-        <div class="flex-1 border-t border-[var(--color-border-soft)]"></div>
-      </div>
-
-      <form method="POST" action="?/previewPlaylist" class="space-y-3" use:enhance={pendingEnhance('preview-playlist')}>
-        <label class="field-label">
-          <span>歌单链接或 ID</span>
-          <input
-            name="playlistInput"
-            class="form-field"
-            value={playlistInputEcho}
-            placeholder="https://music.163.com/#/playlist?id=..."
-          />
-        </label>
-        <button
-          type="submit"
-          class="button button-secondary button-full"
-          disabled={isPending('preview-playlist')}
-          data-pending={isPending('preview-playlist') || undefined}
-        >
-          解析歌单
-        </button>
       </form>
     </Tabs.Content>
   </Tabs.Root>

@@ -10,6 +10,8 @@ import {
   tagsInputSchema
 } from '$lib/validators';
 import { mergeTags, parseTags } from '$lib/tags';
+import { musicProviderIds } from '$lib/music-import';
+const providerSchema = z.enum(musicProviderIds).default('netease');
 
 const formText = z.string().default('');
 export const maxPlaylistImportSongCount = 5000;
@@ -36,10 +38,12 @@ export const requestFormValuesSchema = zfd.formData({
 });
 
 export const songPreviewFormValuesSchema = zfd.formData({
+  provider: providerSchema,
   songInput: formText
 });
 
 export const playlistPreviewFormValuesSchema = zfd.formData({
+  provider: providerSchema,
   playlistInput: formText
 });
 
@@ -80,6 +84,7 @@ export const bulkUpdateSongsFormSchema = zfd
 
 export const playlistImportFormValuesSchema = zfd
   .formData({
+    provider: providerSchema,
     status: formText.pipe(playlistImportSettingsSchema.shape.status),
     sourceInput: formText,
     sharedTagsInput: formText,
@@ -124,7 +129,17 @@ export const playlistImportFormValuesSchema = zfd
     }
   })
   .transform(
-    ({ status, sourceInput, sharedTagsInput, selectedSong, songTitle, songArtist, songLanguage, songTagsInput }) => {
+    ({
+      provider,
+      status,
+      sourceInput,
+      sharedTagsInput,
+      selectedSong,
+      songTitle,
+      songArtist,
+      songLanguage,
+      songTagsInput
+    }) => {
       const songs = songTitle.map((title, index) => ({
         title,
         artist: songArtist[index],
@@ -136,6 +151,7 @@ export const playlistImportFormValuesSchema = zfd
       return {
         status,
         importPreview: {
+          provider,
           sourceInput,
           sharedTagsInput,
           status,
@@ -150,6 +166,7 @@ export const playlistImportPayloadSchema = z
   .object({
     status: playlistImportSettingsSchema.shape.status,
     importPreview: z.object({
+      provider: providerSchema,
       sourceInput: formText,
       sharedTagsInput: formText,
       status: playlistImportSettingsSchema.shape.status,

@@ -12,6 +12,7 @@
     "test:appearance": "node scripts/test-appearance.mjs",
     "test:backup": "node scripts/test-database-backup.mjs",
     "test:tags": "node scripts/test-tags.mjs",
+    "test:music-import": "node scripts/test-music-import.mjs",
     "db:types": "node scripts/generate-supabase-types.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

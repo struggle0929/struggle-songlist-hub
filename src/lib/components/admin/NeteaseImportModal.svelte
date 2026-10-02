@@ -6,6 +6,7 @@
   import { songLanguageItems, songStatusItems } from '$lib/select-options';
   import type { ImportPreview } from '$lib/types';
   import { Dialog } from 'bits-ui';
+  import { musicProviderLabel } from '$lib/music-import';
   import TagInput from './TagInput.svelte';
 
   let {
@@ -34,7 +35,7 @@
     <Dialog.Content class="dialog-content dialog-content-lg">
       <div class="dialog-header">
         <div>
-          <Dialog.Title class="dialog-title">网易云歌单导入</Dialog.Title>
+          <Dialog.Title class="dialog-title">{musicProviderLabel(preview.provider)}歌单导入</Dialog.Title>
           <Dialog.Description class="dialog-description">勾选需要导入的歌曲，核对语言和标签后提交</Dialog.Description>
         </div>
         <Dialog.Close class="dialog-close" aria-label="关闭">
@@ -48,6 +49,7 @@
 
       <form method="POST" action="?/importPlaylist" class="space-y-5" use:enhance={submit.enhance}>
         <input type="hidden" name="sourceInput" value={preview.sourceInput} />
+        <input type="hidden" name="provider" value={preview.provider ?? 'netease'} />
         <TagInput
           name="sharedTagsInput"
           suggestions={tags}
@@ -112,7 +114,7 @@
                       name="songTagsInput"
                       class="form-field-muted min-w-48"
                       value={song.tagsInput}
-                      placeholder="例如：网易云导入"
+                      placeholder={`例如：${musicProviderLabel(preview.provider)}导入`}
                     />
                   </td>
                 </tr>

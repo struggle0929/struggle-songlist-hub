@@ -72,11 +72,11 @@ export const playlistSongImportSchema = z
   }));
 
 export const playlistPreviewSchema = z.object({
-  playlistInput: z.string().trim().min(1, '请填写网易云公开歌单链接或 ID。').max(240, '歌单链接过长。')
+  playlistInput: z.string().trim().min(1, '请填写公开歌单链接或 ID。').max(240, '歌单链接过长。')
 });
 
 export const songPreviewSchema = z.object({
-  songInput: z.string().trim().min(1, '请填写网易云单曲链接或 ID。').max(240, '单曲链接过长。')
+  songInput: z.string().trim().min(1, '请填写单曲链接或 ID。').max(240, '单曲链接过长。')
 });
 
 export const pageSettingsSchema = z.object({

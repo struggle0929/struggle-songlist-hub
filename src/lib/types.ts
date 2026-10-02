@@ -60,6 +60,8 @@ export interface AdminDashboardData {
 }
 
 export interface ImportPreview {
+  sourceKind?: 'song' | 'playlist';
+  provider?: import('$lib/music-import').MusicProvider;
   sharedTagsInput?: string;
   sourceInput: string;
   status: string;

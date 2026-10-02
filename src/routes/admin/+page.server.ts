@@ -18,7 +18,8 @@ import {
   songFormSchema,
   songPreviewFormValuesSchema
 } from '$lib/server/form-schemas';
-import { fetchNeteasePlaylistSongs, fetchNeteaseSong } from '$lib/server/netease';
+import { fetchMusicTracks, fetchSharedMusic } from '$lib/server/music-import';
+import { musicProviderLabel } from '$lib/music-import';
 import { updateRequestStatus } from '$lib/server/requests';
 import { pageSettingsKeys, saveSettingImage, saveSettings } from '$lib/server/settings';
 import {
@@ -41,6 +42,27 @@ export const load: PageServerLoad = async () => ({
 });
 
 export const actions: Actions = {
+  previewMusic: async ({ request }) => {
+    const value = (await request.formData()).get('musicInput');
+    const musicInput = typeof value === 'string' ? value.trim() : '';
+    try {
+      if (!musicInput || musicInput.length > 4000) throw new Error('请填写有效的音乐分享链接（最多 4000 字）。');
+      const { provider, kind, songs } = await fetchSharedMusic(musicInput, maxPlaylistImportSongCount);
+      return {
+        kind: 'preview-ready' as const,
+        adminMessage: `已识别${musicProviderLabel(provider)}${kind === 'song' ? '单曲' : '歌单'}，共 ${songs.length} 首歌曲，请确认后导入。`,
+        importPreview: {
+          provider,
+          sourceKind: kind,
+          sourceInput: musicInput,
+          status: 'ready',
+          songs: songs.map((song) => ({ ...song, language: inferSongLanguage(song.title, song.artist), tagsInput: '' }))
+        }
+      };
+    } catch (error) {
+      return fail(400, { kind: 'preview-parse-error' as const, adminError: getErrorMessage(error), musicInput });
+    }
+  },
   bulkTagSongs: async ({ request }) => {
     const parsed = bulkTagSongsFormSchema.safeParse(await request.formData());
     if (!parsed.success) return fail(400, { kind: 'error' as const, adminError: getValidationMessage(parsed.error) });
@@ -133,25 +155,36 @@ export const actions: Actions = {
 
   previewPlaylist: async ({ request }) => {
     const formData = await request.formData();
-    const values = playlistPreviewFormValuesSchema.parse(formData);
+    const formValues = playlistPreviewFormValuesSchema.safeParse(formData);
+    if (!formValues.success)
+      return fail(400, { kind: 'error' as const, adminError: getValidationMessage(formValues.error) });
+    const values = formValues.data;
     const parsed = playlistPreviewSchema.safeParse(values);
 
     if (!parsed.success) {
       return fail(400, {
         kind: 'preview-parse-error' as const,
         adminError: getValidationMessage(parsed.error),
-        playlistImport: values
+        playlistImport: values,
+        provider: values.provider
       });
     }
 
     try {
-      const playlistSongs = await fetchNeteasePlaylistSongs(parsed.data.playlistInput, maxPlaylistImportSongCount);
+      const playlistSongs = await fetchMusicTracks(
+        values.provider,
+        parsed.data.playlistInput,
+        'playlist',
+        maxPlaylistImportSongCount
+      );
 
       return {
         kind: 'preview-ready' as const,
         adminMessage: `已解析 ${playlistSongs.length} 首歌曲，请勾选要导入的歌曲。`,
         importPreview: {
           sourceInput: parsed.data.playlistInput,
+          sourceKind: 'playlist' as const,
+          provider: values.provider,
           status: 'ready',
           songs: playlistSongs.map((song) => ({
             ...song,
@@ -164,32 +197,39 @@ export const actions: Actions = {
       return fail(500, {
         kind: 'preview-parse-error' as const,
         adminError: getErrorMessage(error),
-        playlistImport: values
+        playlistImport: values,
+        provider: values.provider
       });
     }
   },
 
   previewSong: async ({ request }) => {
     const formData = await request.formData();
-    const values = songPreviewFormValuesSchema.parse(formData);
+    const formValues = songPreviewFormValuesSchema.safeParse(formData);
+    if (!formValues.success)
+      return fail(400, { kind: 'error' as const, adminError: getValidationMessage(formValues.error) });
+    const values = formValues.data;
     const parsed = songPreviewSchema.safeParse(values);
 
     if (!parsed.success) {
       return fail(400, {
         kind: 'preview-parse-error' as const,
         adminError: getValidationMessage(parsed.error),
-        songImport: values
+        songImport: values,
+        provider: values.provider
       });
     }
 
     try {
-      const song = await fetchNeteaseSong(parsed.data.songInput);
+      const [song] = await fetchMusicTracks(values.provider, parsed.data.songInput, 'song');
 
       return {
         kind: 'preview-ready' as const,
         adminMessage: '已解析 1 首歌曲，请确认后导入。',
         importPreview: {
           sourceInput: parsed.data.songInput,
+          sourceKind: 'song' as const,
+          provider: values.provider,
           status: 'ready',
           songs: [
             {
@@ -204,7 +244,8 @@ export const actions: Actions = {
       return fail(500, {
         kind: 'preview-parse-error' as const,
         adminError: getErrorMessage(error),
-        songImport: values
+        songImport: values,
+        provider: values.provider
       });
     }
   },
@@ -236,7 +277,7 @@ export const actions: Actions = {
 
       return {
         kind: 'success' as const,
-        adminMessage: `已从网易云导入 ${importedCount} 首歌曲。`
+        adminMessage: `已从${musicProviderLabel(importPreview.provider)}导入 ${importedCount} 首歌曲。`
       };
     } catch (error) {
       return fail(500, {

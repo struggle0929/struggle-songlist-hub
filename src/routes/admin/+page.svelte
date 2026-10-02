@@ -21,7 +21,7 @@
   let settingsModalOpen = $state(false);
   let activeTab = $state('songs');
   let syncedHashTab = 'songs';
-  let addPanelActive = $state(untrack(() => (startsOnNeteasePanel(form) ? 'netease' : 'manual')));
+  let addPanelActive = $state(untrack(() => (startsOnNeteasePanel(form) ? 'music' : 'manual')));
 
   const settingsError = $derived(form?.kind === 'profile-error' ? form.adminError : undefined);
   const importError = $derived(form?.kind === 'preview-import-error' ? form.adminError : undefined);
