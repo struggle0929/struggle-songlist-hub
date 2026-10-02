@@ -7,6 +7,7 @@ const state = { value: '', uploaded: [], removed: [], failUpload: 0, failSave: f
 globalThis.__appearanceTest = state;
 const server = await createServer({
   configFile: false,
+  cacheDir: resolve('node_modules/.vite-tests/appearance'),
   server: { middlewareMode: true },
   resolve: {
     alias: [

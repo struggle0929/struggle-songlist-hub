@@ -2,9 +2,21 @@
 
 通用单主播歌单。保留点击复制、筛选条件内随机选歌、手机端随机不跳转、愿望单直达、置顶置底、后台状态搜索、网易云导入及移动端字体修复。
 
-默认不含主播个人素材，使用系统鼠标指针。标题、图标与可选动态指针通过部署环境变量配置；头像、背景和 Bilibili 地址由后台设置。多位主播共享代码，每位主播使用独立部署与独立数据库。
+默认不含主播个人素材，使用系统鼠标指针。导航标题、副标题和网页描述通过部署环境变量配置；首页标题、头像、背景、Bilibili 地址、页面图标及静态/动态鼠标指针可在后台设置。多位主播共享代码，每位主播使用独立部署与独立数据库。
 
 详细步骤见 [多主播部署指南](DEPLOYMENT.md)，配置示例见 [.env.example](.env.example)。
+
+功能更新记录见 [更新日志](更新日志.md)。
+
+## 后台标签与排序
+
+- 手动添加、编辑歌曲及批量追加标签时，可以勾选已有标签，也可以输入新标签，支持中英文逗号分隔并自动去重。
+- 歌曲列表勾选多首歌曲后，可统一追加标签；支持本页全选及全选过滤结果，保留原有标签，每首最多 8 个。
+- 网易云单曲和歌单导入预览支持统一追加标签，仅应用于勾选导入的歌曲，并保留每首歌曲单独填写的标签。
+- 后台支持默认排序、歌曲名排序、导入次序排序及升降序切换。导入次序降序可优先查看最近入库的歌曲。
+- 编辑歌曲保存后保留表单内容，收起并重新展开无需刷新。
+
+2026 年 10 月 2 日的标签与排序更新无需执行 SQL 迁移，已有站点更新代码并重新部署即可。首次启用此前的页面外观或数据库恢复功能时，仍需按部署指南执行对应迁移。
 
 基于 QingKong Songlist，保留原作者声明及 LICENSE。
 
@@ -52,6 +64,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 | `npm run check`           | 类型 + Svelte 检查                         |
 | `npm run test:appearance` | 页面图标与鼠标指针存储测试                 |
 | `npm run test:backup`     | 数据备份、恢复及素材切换测试               |
+| `npm run test:tags`       | 标签解析、批量追加、导入与排序回归测试     |
 | `npm run db:types`        | 从 `.env` 对应 Supabase 项目生成数据库类型 |
 | `npm run format`          | Prettier 格式化整个仓库                    |
 | `npm run format:check`    | 只检查格式不写入                           |
@@ -59,6 +72,14 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 提交时 husky pre-commit 会自动跑 `lint-staged`，对 staged 文件执行 `prettier --write`。`npm install` 会自动激活 hook。
 
 首次生成数据库类型前，先执行 `npx supabase login` 登录 Supabase CLI。之后 `npm run db:types` 会从 `.env` 的 `PUBLIC_SUPABASE_URL` 自动提取 project ref，并更新 `src/lib/server/database.types.ts`。
+
+## 随时进行本地测试
+
+在项目目录配置好 `.env` 后执行 `npm run dev -- --host 127.0.0.1 --port 5173`，打开终端显示的本地地址（通常为 `http://127.0.0.1:5173`）。终端必须保持运行；退出终端或重启电脑后，重新执行命令即可恢复测试地址。
+
+仅预览前台时可按部署指南启用 `LOCAL_DEMO=true`。需要测试后台添加、编辑、导入及恢复时，使用独立测试数据库并设置 `LOCAL_DEMO=false`；本地连接正式数据库时，后台操作也会修改正式数据。
+
+开发缓存和自动测试缓存已分开，避免测试运行影响本地页面交互。浏览器回归脚本 `scripts/test-tags-ui.mjs` 需要另行安装 Playwright、启动本地服务，并准备含歌曲及已有标签的测试数据库；脚本会拦截并模拟所有 POST 请求。运行方式为 `node --env-file=.env scripts/test-tags-ui.mjs`。
 
 ## 部署
 

@@ -3,15 +3,18 @@
   import { isPending, pendingEnhance } from '$lib/pending.svelte';
   import { getPlaylistInputEcho, getSongInputEcho, type AdminActionForm } from '$lib/admin/result';
   import Select from '$lib/components/ui/Select.svelte';
+  import TagInput from './TagInput.svelte';
   import { songLanguageItems, songStatusItems } from '$lib/select-options';
   import { Tabs } from 'bits-ui';
 
   let {
     active = $bindable('manual'),
-    form
+    form,
+    tags = []
   }: {
     active?: string;
     form?: AdminActionForm;
+    tags?: string[];
   } = $props();
 
   const songInputEcho = $derived(getSongInputEcho(form));
@@ -51,10 +54,7 @@
           </label>
         </div>
 
-        <label class="field-label">
-          <span>标签（逗号分隔）</span>
-          <input name="tagsInput" class="form-field" placeholder="例如：高能, 日语, 动画" />
-        </label>
+        <TagInput suggestions={tags} />
 
         <label
           class="flex items-center gap-3 rounded-[14px] border border-[var(--color-border-soft)] bg-[var(--color-surface-muted)] px-4 py-3 text-sm text-[var(--color-text-secondary)]"

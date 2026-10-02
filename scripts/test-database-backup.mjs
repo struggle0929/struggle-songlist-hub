@@ -52,6 +52,7 @@ const state = {
 globalThis.__backupTest = state;
 const server = await createServer({
   configFile: false,
+  cacheDir: resolve('node_modules/.vite-tests/database-backup'),
   server: { middlewareMode: true },
   resolve: {
     alias: [

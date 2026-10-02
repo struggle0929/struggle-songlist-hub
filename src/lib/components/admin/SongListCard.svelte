@@ -9,13 +9,19 @@
   import { songStatusClasses } from '$lib/status-styles';
   import { songStatusLabels, type Song } from '$lib/types';
   import { SvelteSet } from 'svelte/reactivity';
+  import TagInput from './TagInput.svelte';
+  import { mergeTags } from '$lib/tags';
+  import { sortAdminSongs, type AdminSongSort, type SongTitleSortDirection } from '$lib/songs';
 
   let { songs }: { songs: Song[] } = $props();
 
   let songSearch = $state('');
   let songPage = $state(1);
+  let sortMode = $state<AdminSongSort>('default');
+  let sortDirection = $state<SongTitleSortDirection>('asc');
   const songPageSize = 20;
   const selectedIds = new SvelteSet<string>();
+  const tags = $derived(mergeTags(...songs.map((song) => song.tags)));
 
   const normalizedSearch = $derived(songSearch.trim().toLowerCase());
   const matchesAdminSongSearch = (song: Song) => {
@@ -25,7 +31,7 @@
       (value) => value.toLowerCase().includes(normalizedSearch)
     );
   };
-  const filteredSongs = $derived(songs.filter(matchesAdminSongSearch));
+  const filteredSongs = $derived(sortAdminSongs(songs.filter(matchesAdminSongSearch), sortMode, sortDirection));
   const totalPages = $derived(Math.max(1, Math.ceil(filteredSongs.length / songPageSize)));
   const safePage = $derived(Math.min(songPage, totalPages));
   const pagedSongs = $derived(filteredSongs.slice((safePage - 1) * songPageSize, safePage * songPageSize));
@@ -35,6 +41,14 @@
   const songIds = $derived(new Set(songs.map((song) => song.id)));
 
   let lastSeenSearch = '';
+  let lastSeenSort = 'default:asc';
+  $effect(() => {
+    const current = `${sortMode}:${sortDirection}`;
+    if (current !== lastSeenSort) {
+      lastSeenSort = current;
+      songPage = 1;
+    }
+  });
   $effect(() => {
     if (normalizedSearch !== lastSeenSearch) {
       lastSeenSearch = normalizedSearch;
@@ -166,6 +180,30 @@
           </form>
         {/each}
       </div>
+      <form
+        method="POST"
+        action="?/bulkTagSongs"
+        class="w-full space-y-3"
+        use:enhance={pendingEnhance(
+          'bulk-tags',
+          submitConfirmation.before(() => ({
+            title: `确认给 ${selectedIds.size} 首歌曲追加标签？`,
+            description: '保留原有标签，重复标签不会重复添加。',
+            confirmLabel: '追加标签'
+          }))
+        )}
+      >
+        {#each [...selectedIds] as id}
+          <input type="hidden" name="id" value={id} />
+        {/each}
+        <TagInput suggestions={tags} label="批量追加标签" />
+        <button
+          type="submit"
+          class="button button-secondary button-small"
+          disabled={isPending('bulk-tags')}
+          data-pending={isPending('bulk-tags') || undefined}>追加到已选 {selectedIds.size} 首</button
+        >
+      </form>
     </div>
   {/if}
 
@@ -179,7 +217,7 @@
       {/if}
     </div>
   {:else}
-    <div class="admin-list-head mt-4">
+    <div class="admin-list-head mt-4 flex-wrap gap-3">
       <label class="admin-select-all">
         <input
           type="checkbox"
@@ -190,7 +228,30 @@
         />
         <span>本页全选</span>
       </label>
-      <span class="text-xs text-[var(--color-text-muted)]">第 {safePage} / {totalPages} 页</span>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <div class="w-44 shrink-0">
+          <Select
+            bind:value={sortMode}
+            placeholder="排序方式"
+            triggerClass="form-field-muted whitespace-nowrap"
+            items={[
+              { value: 'default', label: '默认排序' },
+              { value: 'title', label: '歌曲名排序' },
+              { value: 'import', label: '导入次序排序' }
+            ]}
+          />
+        </div>
+        <button
+          type="button"
+          class="button button-ghost button-small"
+          aria-label={sortDirection === 'asc' ? '当前升序，切换为降序' : '当前降序，切换为升序'}
+          title={sortDirection === 'asc' ? '升序：点击切换为降序' : '降序：点击切换为升序'}
+          onclick={() => (sortDirection = sortDirection === 'asc' ? 'desc' : 'asc')}
+        >
+          <Icon name="arrow-down-up" />{sortDirection === 'asc' ? '升序' : '降序'}
+        </button>
+        <span class="text-xs text-[var(--color-text-muted)]">第 {safePage} / {totalPages} 页</span>
+      </div>
     </div>
 
     <div class="mt-3 space-y-3">
@@ -227,7 +288,7 @@
             method="POST"
             action="?/saveSong"
             class="mt-5 grid gap-4 sm:grid-cols-2"
-            use:enhance={pendingEnhance(`save-${song.id}`)}
+            use:enhance={pendingEnhance(`save-${song.id}`, undefined, { reset: false })}
           >
             <input type="hidden" name="id" value={song.id} />
 
@@ -257,10 +318,9 @@
               <Select name="status" value={song.status} items={songStatusItems} triggerClass="form-field-muted" />
             </label>
 
-            <label class="field-label sm:col-span-2">
-              <span>标签</span>
-              <input name="tagsInput" value={song.tags.join(', ')} class="form-field-muted" />
-            </label>
+            <div class="sm:col-span-2">
+              <TagInput suggestions={tags} value={song.tags.join(', ')} muted />
+            </div>
 
             <label
               class="flex items-center gap-3 rounded-[14px] border border-[var(--color-border-soft)] bg-[var(--color-surface-muted)] px-4 py-3 text-sm text-[var(--color-text-secondary)] sm:col-span-2"

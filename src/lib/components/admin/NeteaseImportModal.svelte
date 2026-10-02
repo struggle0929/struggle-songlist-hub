@@ -6,15 +6,18 @@
   import { songLanguageItems, songStatusItems } from '$lib/select-options';
   import type { ImportPreview } from '$lib/types';
   import { Dialog } from 'bits-ui';
+  import TagInput from './TagInput.svelte';
 
   let {
     preview,
     adminError,
-    onClose
+    onClose,
+    tags = []
   }: {
     preview: ImportPreview;
     adminError?: string;
     onClose: () => void;
+    tags?: string[];
   } = $props();
 
   const submit = createLocalPending();
@@ -45,6 +48,12 @@
 
       <form method="POST" action="?/importPlaylist" class="space-y-5" use:enhance={submit.enhance}>
         <input type="hidden" name="sourceInput" value={preview.sourceInput} />
+        <TagInput
+          name="sharedTagsInput"
+          suggestions={tags}
+          value={preview.sharedTagsInput ?? ''}
+          label="统一追加标签"
+        />
 
         <label class="field-label">
           <span>状态</span>

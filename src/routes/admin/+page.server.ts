@@ -7,6 +7,7 @@ import { getAdminDashboardData, resetDatabase as resetSonglistDatabase } from '$
 import { getErrorMessage, getValidationMessage } from '$lib/server/errors';
 import {
   bulkUpdateSongsFormSchema,
+  bulkTagSongsFormSchema,
   deleteSongFormSchema,
   maxPlaylistImportSongCount,
   playlistImportFormValuesSchema,
@@ -22,6 +23,7 @@ import { updateRequestStatus } from '$lib/server/requests';
 import { pageSettingsKeys, saveSettingImage, saveSettings } from '$lib/server/settings';
 import {
   bulkDeleteSongs,
+  bulkAppendSongTags,
   bulkSetSongsPublic,
   deleteSong as removeSong,
   importSongs,
@@ -39,6 +41,16 @@ export const load: PageServerLoad = async () => ({
 });
 
 export const actions: Actions = {
+  bulkTagSongs: async ({ request }) => {
+    const parsed = bulkTagSongsFormSchema.safeParse(await request.formData());
+    if (!parsed.success) return fail(400, { kind: 'error' as const, adminError: getValidationMessage(parsed.error) });
+    try {
+      const count = await bulkAppendSongTags(parsed.data.ids, parsed.data.tags);
+      return { kind: 'success' as const, adminMessage: `已为 ${count} 首歌曲追加标签，原有标签已保留。` };
+    } catch (error) {
+      return fail(400, { kind: 'error' as const, adminError: getErrorMessage(error) });
+    }
+  },
   saveSong: async ({ request }) => {
     const parsed = songFormSchema.safeParse(await request.formData());
 

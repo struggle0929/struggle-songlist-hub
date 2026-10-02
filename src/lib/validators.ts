@@ -1,22 +1,17 @@
 import { z } from 'zod';
 
 import { requestDecisionOptions, songLanguageOptions, songStatusOptions } from '$lib/types';
+import { parseTags } from '$lib/tags';
 
 const maxTagCount = 8;
 const maxArtistNameLength = 300;
 const artistNameMaxMessage = `原唱名称请控制在 ${maxArtistNameLength} 字以内。`;
 
-const csvToTags = (value: string) =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const tagsInputSchema = z
+export const tagsInputSchema = z
   .string()
   .trim()
   .max(240, '标签内容过长。')
-  .transform(csvToTags)
+  .transform(parseTags)
   .refine((tags) => tags.length <= maxTagCount, `标签最多 ${maxTagCount} 个。`);
 
 export const requestSchema = z.object({

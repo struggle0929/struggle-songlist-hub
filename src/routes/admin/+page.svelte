@@ -1,5 +1,6 @@
 <script lang="ts">
   import { branding } from '$lib/branding';
+  import { mergeTags } from '$lib/tags';
   import AddSongPanel from '$lib/components/admin/AddSongPanel.svelte';
   import DataSettingsModal from '$lib/components/admin/DataSettingsModal.svelte';
   import NeteaseImportModal from '$lib/components/admin/NeteaseImportModal.svelte';
@@ -24,6 +25,7 @@
 
   const settingsError = $derived(form?.kind === 'profile-error' ? form.adminError : undefined);
   const importError = $derived(form?.kind === 'preview-import-error' ? form.adminError : undefined);
+  const tags = $derived(mergeTags(...data.dashboard.songs.map((song) => song.tags)));
 
   onMount(() => {
     if (window.location.hash === '#requests') {
@@ -79,7 +81,7 @@
     </Tabs.List>
 
     <Tabs.Content value="songs" class="grid items-start gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-      <AddSongPanel bind:active={addPanelActive} {form} />
+      <AddSongPanel bind:active={addPanelActive} {form} {tags} />
       <SongListCard songs={data.dashboard.songs} />
     </Tabs.Content>
 
@@ -95,6 +97,7 @@
 {#if hasImportPreview(form) && !importModalDismissed}
   <NeteaseImportModal
     preview={form.importPreview}
+    {tags}
     adminError={importError}
     onClose={() => (importModalDismissed = true)}
   />

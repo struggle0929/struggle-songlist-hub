@@ -6,8 +6,10 @@ import {
   playlistImportSettingsSchema,
   playlistSongImportSchema,
   requestDecisionSchema,
-  songSchema
+  songSchema,
+  tagsInputSchema
 } from '$lib/validators';
+import { mergeTags, parseTags } from '$lib/tags';
 
 const formText = z.string().default('');
 export const maxPlaylistImportSongCount = 5000;
@@ -57,6 +59,13 @@ export const deleteSongFormSchema = zfd.formData({
   id: formText.pipe(z.string().trim().min(1, '缺少歌曲 ID。'))
 });
 
+export const bulkTagSongsFormSchema = zfd
+  .formData({
+    id: zfd.repeatable(z.array(z.string().uuid()).min(1, '请至少选择一首歌曲。').max(5000)),
+    tagsInput: formText.pipe(tagsInputSchema).refine((tags) => tags.length > 0, '请选择或输入至少一个标签。')
+  })
+  .transform(({ id, tagsInput }) => ({ ids: [...new Set(id)], tags: tagsInput }));
+
 export const bulkUpdateSongsFormSchema = zfd
   .formData({
     bulkAction: z.enum(['delete', 'setPublic', 'setPrivate'], {
@@ -73,6 +82,7 @@ export const playlistImportFormValuesSchema = zfd
   .formData({
     status: formText.pipe(playlistImportSettingsSchema.shape.status),
     sourceInput: formText,
+    sharedTagsInput: formText,
     selectedSong: zfd.repeatable(playlistImportSelectedRows),
     songTitle: zfd.repeatable(playlistImportTextRows),
     songArtist: zfd.repeatable(playlistImportTextRows),
@@ -113,40 +123,62 @@ export const playlistImportFormValuesSchema = zfd
       });
     }
   })
-  .transform(({ status, sourceInput, selectedSong, songTitle, songArtist, songLanguage, songTagsInput }) => {
-    const songs = songTitle.map((title, index) => ({
-      title,
-      artist: songArtist[index],
-      language: songLanguage[index],
-      tagsInput: songTagsInput[index]
-    }));
-    const selectedIndexes = new Set(selectedSong);
+  .transform(
+    ({ status, sourceInput, sharedTagsInput, selectedSong, songTitle, songArtist, songLanguage, songTagsInput }) => {
+      const songs = songTitle.map((title, index) => ({
+        title,
+        artist: songArtist[index],
+        language: songLanguage[index],
+        tagsInput: songTagsInput[index]
+      }));
+      const selectedIndexes = new Set(selectedSong);
 
-    return {
-      status,
-      importPreview: {
-        sourceInput,
+      return {
         status,
-        songs
-      },
-      selectedSongs: songs.filter((_, index) => selectedIndexes.has(index))
-    };
-  });
+        importPreview: {
+          sourceInput,
+          sharedTagsInput,
+          status,
+          songs
+        },
+        selectedSongs: songs.filter((_, index) => selectedIndexes.has(index))
+      };
+    }
+  );
 
 export const playlistImportPayloadSchema = z
   .object({
     status: playlistImportSettingsSchema.shape.status,
     importPreview: z.object({
       sourceInput: formText,
+      sharedTagsInput: formText,
       status: playlistImportSettingsSchema.shape.status,
       songs: z.array(playlistImportPreviewSongSchema).max(maxPlaylistImportSongCount, playlistImportSongCountMessage)
     }),
-    selectedSongs: z.array(playlistSongImportSchema).min(1, '请选择至少一首歌。')
+    selectedSongs: z.array(playlistImportPreviewSongSchema).min(1, '请选择至少一首歌。')
+  })
+  .superRefine(({ importPreview, selectedSongs }, ctx) => {
+    const shared = tagsInputSchema.safeParse(importPreview.sharedTagsInput);
+    if (!shared.success) {
+      ctx.addIssue({ code: 'custom', message: shared.error.issues[0].message });
+      return;
+    }
+    for (const song of selectedSongs) {
+      const parsed = playlistSongImportSchema.safeParse({
+        ...song,
+        tagsInput: mergeTags(parseTags(song.tagsInput), shared.data).join(', ')
+      });
+      if (!parsed.success)
+        ctx.addIssue({ code: 'custom', message: `${song.title}：${parsed.error.issues[0].message}` });
+    }
   })
   .transform(({ importPreview, selectedSongs, status }) => ({
     importPreview,
     songsToImport: selectedSongs.map((song) => ({
-      ...song,
+      ...playlistSongImportSchema.parse({
+        ...song,
+        tagsInput: mergeTags(parseTags(song.tagsInput), parseTags(importPreview.sharedTagsInput)).join(', ')
+      }),
       status,
       isPublic: true
     }))

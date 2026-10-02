@@ -43,13 +43,14 @@ const wrapPendingSubmit =
     };
   };
 
-export const pendingEnhance = (key: string, before?: BeforeHook): SubmitFunction =>
+export const pendingEnhance = (key: string, before?: BeforeHook, updateOptions?: UpdateOptions): SubmitFunction =>
   wrapPendingSubmit(
     {
       start: () => pendingActions.add(key),
       stop: () => pendingActions.delete(key)
     },
-    before
+    before,
+    updateOptions
   );
 
 export function createSubmitConfirmation() {

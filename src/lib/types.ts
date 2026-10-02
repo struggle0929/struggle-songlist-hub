@@ -11,6 +11,7 @@ export type RequestDecision = (typeof requestDecisionOptions)[number];
 
 export interface Song {
   id: string;
+  createdAt?: string;
   title: string;
   artist: string;
   language: SongLanguage;
@@ -59,6 +60,7 @@ export interface AdminDashboardData {
 }
 
 export interface ImportPreview {
+  sharedTagsInput?: string;
   sourceInput: string;
   status: string;
   songs: Array<{

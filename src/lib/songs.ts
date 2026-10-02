@@ -1,6 +1,18 @@
 import type { Song } from '$lib/types';
 
 export type SongTitleSortDirection = 'asc' | 'desc';
+export type AdminSongSort = 'default' | 'title' | 'import';
+
+export const sortAdminSongs = (songs: Song[], mode: AdminSongSort, direction: SongTitleSortDirection) => {
+  if (mode === 'title') return sortSongsByTitle(songs, direction);
+  if (mode === 'default') return direction === 'asc' ? [...songs] : [...songs].reverse();
+  return [...songs].sort((a, b) => {
+    const timeA = Date.parse(a.createdAt ?? '') || 0;
+    const timeB = Date.parse(b.createdAt ?? '') || 0;
+    const diff = timeA - timeB || a.id.localeCompare(b.id);
+    return direction === 'asc' ? diff : -diff;
+  });
+};
 
 const languageOrder = new Map([
   ['中文', 0],
