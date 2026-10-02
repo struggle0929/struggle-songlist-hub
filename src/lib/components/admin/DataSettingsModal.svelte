@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { page } from '$app/state';
   import { invalidateAll } from '$app/navigation';
   import { PUBLIC_SUPABASE_PUBLISHABLE_KEY, PUBLIC_SUPABASE_URL } from '$env/static/public';
   import type { BackupFile } from '$lib/database-backup';
@@ -15,7 +16,7 @@
   let validationError = $state('');
 
   const requestJson = async (url: string, options?: RequestInit) => {
-    const response = await fetch(url, options);
+    const response = await fetch((page.data.base || '') + url, options);
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || '操作失败，请稍后重试。');
     return body;
@@ -173,7 +174,7 @@
       parsedBackup = null;
     } catch (error) {
       if (restoreId)
-        await fetch('/admin/database/import/cleanup', {
+        await fetch((page.data.base || '') + '/admin/database/import/cleanup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ restoreId })
@@ -193,7 +194,9 @@
       <div class="dialog-header">
         <div>
           <Dialog.Title class="dialog-title">数据配置</Dialog.Title>
-          <Dialog.Description class="dialog-description">导出完整备份，或用本地备份覆盖当前歌单数据</Dialog.Description>
+          <Dialog.Description class="dialog-description"
+            >导出完整备份，或用本地备份覆盖当前主播歌单数据</Dialog.Description
+          >
         </div>
         <Dialog.Close class="dialog-close" aria-label="关闭" disabled={pending}
           ><Icon name="close" size={18} /></Dialog.Close
@@ -246,9 +249,11 @@
             <div
               class="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-muted)] p-4 text-sm"
             >
-              <p class="font-medium">备份检查通过</p>
+              <p class="font-medium">备份检查通过（目标：{page.data.streamer?.name}）</p>
               <p class="mt-2 text-[var(--color-text-secondary)]">
-                导出时间：{new Date(parsedBackup.exportedAt).toLocaleString('zh-CN')}
+                来源：{parsedBackup.streamer?.name || '旧版单主播备份'} · 导出时间：{new Date(
+                  parsedBackup.exportedAt
+                ).toLocaleString('zh-CN')}
               </p>
               <p class="text-[var(--color-text-secondary)]">
                 歌曲 {parsedBackup.data.songs.length} 首 · 愿望 {parsedBackup.data.requests.length} 条 · 素材 {parsedBackup
@@ -256,7 +261,7 @@
               </p>
             </div>
             <div class="alert alert-danger">
-              加载会完整覆盖当前歌曲、愿望单和页面配置。建议先导出当前数据库作为备份。
+              加载会完整覆盖当前主播 {page.data.streamer?.name} 的歌曲、愿望单和页面配置，其他主播不受影响。建议先导出当前数据库作为备份。
             </div>
           {/if}
           <button

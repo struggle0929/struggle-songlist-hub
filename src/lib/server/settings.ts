@@ -1,3 +1,4 @@
+import { tenantId, tenantAssetPath, ownedAsset, currentContext } from '$lib/server/tenant';
 import { parseAppearance } from '$lib/appearance';
 import { randomUUID } from 'node:crypto';
 
@@ -60,7 +61,11 @@ const resolveImageExtension = (file: File) => {
 };
 
 export const listSettings = async (keys: readonly PageSettingKey[]) => {
-  const { data, error } = await supabasePublic.from('settings').select('key, value').in('key', keys);
+  const { data, error } = await supabasePublic
+    .from('settings')
+    .select('key, value')
+    .eq('streamer_id', tenantId())
+    .in('key', keys);
 
   if (error) {
     throw error;
@@ -79,7 +84,7 @@ const getSettingValue = (settings: Record<string, string>, key: PageSettingKey) 
   settings[key] || pageSettingsDefaults[key];
 
 const getAssetPublicUrl = (path: string) => {
-  if (!path) {
+  if (!path || !ownedAsset(path)) {
     return '';
   }
 
@@ -100,7 +105,7 @@ const mapPageSettings = (settings: Record<string, string>): PageSettings => ({
   appearance: resolveAppearance(getSettingValue(settings, pageSettingsKeys.appearance)),
   avatar: getAssetPublicUrl(getSettingValue(settings, pageSettingsKeys.avatarPath)),
   background: getAssetPublicUrl(getSettingValue(settings, pageSettingsKeys.backgroundPath)),
-  heroTitle: getSettingValue(settings, pageSettingsKeys.heroTitle),
+  heroTitle: settings[pageSettingsKeys.heroTitle] || currentContext().streamer?.name || branding.title,
   bilibiliUrl: getSettingValue(settings, pageSettingsKeys.bilibiliUrl)
 });
 
@@ -111,8 +116,12 @@ export const getSettings = async (): Promise<PageSettings> => {
 };
 
 export const saveSettings = async (entries: Partial<Record<PageSettingKey, string>>) => {
-  const rows = Object.entries(entries).map(([key, value]) => ({ key, value: value ?? '' }));
-  const { error } = await supabaseAdmin.from('settings').upsert(rows);
+  const rows = Object.entries(entries).map(([key, value]) => ({
+    streamer_id: tenantId(true),
+    key,
+    value: value ?? ''
+  }));
+  const { error } = await supabaseAdmin.from('settings').upsert(rows, { onConflict: 'streamer_id,key' });
 
   if (error) {
     throw error;
@@ -125,7 +134,7 @@ export const saveSettingImage = async (kind: SettingImageKind, file: File) => {
   const settingKey = settingImageKinds[kind];
   const existingPath = getSettingValue(await listSettings([settingKey]), settingKey);
   const extension = resolveImageExtension(file);
-  const objectPath = `profile/${kind}-${Date.now()}-${randomUUID()}.${extension}`;
+  const objectPath = tenantAssetPath(`profile/${kind}-${Date.now()}-${randomUUID()}.${extension}`);
 
   const { error: uploadError } = await supabase.storage.from(settingsAssetBucket).upload(objectPath, file, {
     upsert: false,
@@ -144,7 +153,7 @@ export const saveSettingImage = async (kind: SettingImageKind, file: File) => {
     throw error;
   }
 
-  if (existingPath) {
+  if (existingPath && ownedAsset(existingPath)) {
     const { error: removeError } = await supabase.storage.from(settingsAssetBucket).remove([existingPath]);
 
     if (removeError) {

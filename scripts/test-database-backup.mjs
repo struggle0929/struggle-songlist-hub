@@ -95,7 +95,7 @@ const server = await createServer({
           async list(folder) { return {data:[...state.files].filter(([path])=>path.startsWith(folder+'/')).map(([path,size])=>({name:path.slice(folder.length+1),metadata:{size}})),error:null}; },
           async remove(paths) { state.removed.push(...paths); for(const path of paths)state.files.delete(path); return {error:null}; }
         };
-        const query = {select(){return this},order(){return this},range(){return this}};
+        const query = {eq(){return this},select(){return this},order(){return this},range(){return this}};
         export const supabaseAdmin = {from(){return query},storage:{from(){return bucket}},async rpc(name,args){state.rpc={name,args};state.settings={...args.p_settings};return {error:null}}};
         export const supabasePublic = {storage:{from(){return bucket}}};
       `;
@@ -125,6 +125,14 @@ async function test(name, run) {
 }
 
 try {
+  const tenant = await server.ssrLoadModule('/src/lib/server/tenant.ts');
+  tenant.tenantContext.enterWith({
+    streamer: { id: '00000000-0000-4000-8000-000000000001', slug: 'siro0', name: 'Siro0', enabled: true },
+    userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    isAdmin: true,
+    isPlatformAdmin: false,
+    base: ''
+  });
   const shared = await server.ssrLoadModule('/src/lib/database-backup.ts');
   const service = await server.ssrLoadModule('/src/lib/server/database-backup.ts');
   const settingsRows = Object.entries(state.settings).map(([key, value]) => ({ key, value }));
@@ -134,6 +142,7 @@ try {
     const parsed = shared.backupFileSchema.parse({
       format: shared.backupFormat,
       version: shared.backupVersion,
+      streamer: { id: ids.song, slug: 'siro0', name: 'Siro0' },
       exportedAt: '2026-09-05T00:00:00.000Z',
       data,
       assets: [{ originalPath: 'profile/old.jpg', contentType: 'image/jpeg', size: 3, base64: 'YWJj' }]
@@ -149,7 +158,7 @@ try {
       data,
       assets: []
     };
-    assert.equal(shared.backupFileSchema.safeParse({ ...base, version: 2 }).success, false);
+    assert.equal(shared.backupFileSchema.safeParse({ ...base, version: 3 }).success, false);
     assert.equal(shared.backupFileSchema.safeParse({ ...base, data: { ...data, songs: [song, song] } }).success, false);
     assert.equal(shared.backupFileSchema.safeParse({ ...base, data: { ...data, songs: [] } }).success, false);
   });
@@ -172,7 +181,11 @@ try {
       ]
     });
     assert.equal(prepared.uploads.length, 2);
-    assert.ok(prepared.uploads.every((upload) => upload.path.startsWith(`restores/${prepared.restoreId}/`)));
+    assert.ok(
+      prepared.uploads.every((upload) =>
+        upload.path.startsWith(`00000000-0000-4000-8000-000000000001/restores/${prepared.restoreId}/`)
+      )
+    );
     state.signed = [];
     state.failSignedAt = 2;
     await assert.rejects(() =>
@@ -197,16 +210,24 @@ try {
     const result = await service.completeImport({ restoreId: prepared.restoreId, data, assets: prepared.uploads });
     assert.deepEqual(result, { songs: 1, requests: 1, assets: 2 });
     assert.equal(state.rpc.name, 'restore_admin_data');
-    assert.ok(state.rpc.args.p_settings.avatar_path.startsWith(`restores/${prepared.restoreId}/`));
-    assert.ok(JSON.parse(state.rpc.args.p_settings.appearance).logo.startsWith(`restores/${prepared.restoreId}/`));
+    assert.ok(
+      state.rpc.args.p_settings.avatar_path.startsWith(
+        `00000000-0000-4000-8000-000000000001/restores/${prepared.restoreId}/`
+      )
+    );
+    assert.ok(
+      JSON.parse(state.rpc.args.p_settings.appearance).logo.startsWith(
+        `00000000-0000-4000-8000-000000000001/restores/${prepared.restoreId}/`
+      )
+    );
     assert.ok(state.removed.includes('profile/old.jpg'));
     assert.ok(state.removed.includes('appearance/old.png'));
   });
 
   await test('cleanup never deletes assets already referenced by restored settings', async () => {
     const restoreId = '33333333-3333-4333-8333-333333333333';
-    const active = `restores/${restoreId}/active.png`;
-    const abandoned = `restores/${restoreId}/abandoned.png`;
+    const active = `00000000-0000-4000-8000-000000000001/restores/${restoreId}/active.png`;
+    const abandoned = `00000000-0000-4000-8000-000000000001/restores/${restoreId}/abandoned.png`;
     state.files.set(active, 3);
     state.files.set(abandoned, 4);
     state.settings.appearance = JSON.stringify({ logo: active, favicon: '', mode: 'system', static: {}, animated: {} });

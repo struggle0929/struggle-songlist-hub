@@ -1,0 +1,150 @@
+import { randomUUID } from 'node:crypto';
+import { supabaseAdmin, supabasePublic } from '$lib/server/supabase';
+import { getDemoCatalog, localDemo } from '$lib/server/demo';
+import { currentContext, requirePlatformAdmin } from '$lib/server/tenant';
+import { validSlug, type Streamer } from '$lib/streamers';
+import { UserFacingError } from '$lib/server/errors';
+
+export const demoStreamers: Streamer[] = [
+  {
+    id: '11111111-1111-4111-8111-111111111111',
+    slug: 'siro0',
+    name: 'Siro0',
+    enabled: true,
+    created_at: '2026-10-03T00:00:00Z'
+  },
+  {
+    id: '22222222-2222-4222-8222-222222222222',
+    slug: 'xunxuntu',
+    name: '薰薰兔',
+    enabled: true,
+    created_at: '2026-10-03T00:00:00Z'
+  }
+];
+export async function resolveStreamer(slug: string) {
+  if (!validSlug(slug)) return null;
+  if (localDemo) return demoStreamers.find((s) => s.slug === slug) ?? null;
+  const { data, error } = await supabasePublic
+    .from('streamers')
+    .select('*')
+    .eq('slug', slug)
+    .eq('enabled', true)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+export async function permissions(userId: string, streamerId?: string) {
+  const { data: platform, error } = await supabaseAdmin
+    .from('platform_admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (platform) return { isPlatformAdmin: true, isAdmin: Boolean(streamerId) };
+  if (!streamerId) return { isPlatformAdmin: false, isAdmin: false };
+  const { data: member, error: memberError } = await supabaseAdmin
+    .from('streamer_members')
+    .select('user_id')
+    .eq('user_id', userId)
+    .eq('streamer_id', streamerId)
+    .maybeSingle();
+  if (memberError) throw memberError;
+  return { isPlatformAdmin: false, isAdmin: Boolean(member) };
+}
+export async function listStreamers(managed = false): Promise<Streamer[]> {
+  if (localDemo) return demoStreamers;
+  const context = currentContext();
+  if (managed && !context.userId) return [];
+  let query = (managed ? supabaseAdmin : supabasePublic).from('streamers').select('*').order('name').order('id');
+  if (!managed) query = query.eq('enabled', true);
+  if (managed && !context.isPlatformAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('streamer_members')
+      .select('streamer_id')
+      .eq('user_id', context.userId!);
+    if (error) throw error;
+    if (!data?.length) return [];
+    query = query
+      .in(
+        'id',
+        data.map((m) => m.streamer_id)
+      )
+      .eq('enabled', true);
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+export async function createStreamer(slug: string, name: string) {
+  requirePlatformAdmin();
+  if (!validSlug(slug) || !name.trim() || name.trim().length > 80) throw new UserFacingError('主播标识或名称无效。');
+  const { error } = await supabaseAdmin.rpc('create_streamer', {
+    p_id: randomUUID(),
+    p_slug: slug,
+    p_name: name.trim()
+  });
+  if (error?.code === '23505') throw new UserFacingError('主播标识已存在。');
+  if (error) throw error;
+}
+export async function editStreamer(id: string, name: string, enabled: boolean) {
+  requirePlatformAdmin();
+  if (!name.trim() || name.trim().length > 80) throw new UserFacingError('昵称须为 1～80 字。');
+  const { error } = await supabaseAdmin.from('streamers').update({ name: name.trim(), enabled }).eq('id', id);
+  if (error) throw error;
+}
+export async function listMembers() {
+  requirePlatformAdmin();
+  const { data, error } = await supabaseAdmin.from('streamer_members').select('*').order('created_at');
+  if (error) throw error;
+  return data ?? [];
+}
+export async function assignAccount(streamerId: string, input: { userId?: string; email?: string; password?: string }) {
+  requirePlatformAdmin();
+  const { data: streamer, error: lookupError } = await supabaseAdmin
+    .from('streamers')
+    .select('id')
+    .eq('id', streamerId)
+    .single();
+  if (lookupError || !streamer) throw new UserFacingError('主播不存在。');
+  let userId = input.userId;
+  let created = false;
+  if (userId) {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (error || !data.user) throw new UserFacingError('账号不存在。');
+  } else {
+    if (!input.email || !input.password || input.password.length < 12)
+      throw new UserFacingError('新账号需有效邮箱及至少 12 位密码。');
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true
+    });
+    if (error || !data.user) throw new UserFacingError('无法创建账号，请检查邮箱是否已存在和密码要求。');
+    userId = data.user.id;
+    created = true;
+  }
+  const { error } = await supabaseAdmin
+    .from('streamer_members')
+    .upsert({ streamer_id: streamerId, user_id: userId }, { onConflict: 'streamer_id,user_id' });
+  if (error) {
+    if (created) {
+      const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (rollbackError) console.error('账号授权失败后清理未授权账号失败', userId);
+    }
+    throw error;
+  }
+}
+export async function revokeAccount(streamerId: string, userId: string) {
+  requirePlatformAdmin();
+  const { error } = await supabaseAdmin
+    .from('streamer_members')
+    .delete()
+    .eq('streamer_id', streamerId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export function emptyCatalog() {
+  const catalog = getDemoCatalog();
+  return { ...catalog, songs: [], tags: [] };
+}

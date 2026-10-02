@@ -8,6 +8,25 @@ export type Database = {
   };
   public: {
     Tables: {
+      streamers: {
+        Row: { id: string; slug: string; name: string; enabled: boolean; created_at: string };
+        Insert: { id?: string; slug: string; name: string; enabled?: boolean; created_at?: string };
+        Update: { name?: string; enabled?: boolean };
+        Relationships: [];
+      };
+      streamer_members: {
+        Row: { streamer_id: string; user_id: string; created_at: string };
+        Insert: { streamer_id: string; user_id: string; created_at?: string };
+        Update: { streamer_id?: string; user_id?: string };
+        Relationships: [];
+      };
+      platform_admins: {
+        Row: { user_id: string };
+        Insert: { user_id: string };
+        Update: { user_id?: string };
+        Relationships: [];
+      };
+
       request_rate_limits: {
         Row: {
           client_key: string;
@@ -28,6 +47,7 @@ export type Database = {
       };
       requests: {
         Row: {
+          streamer_id: string;
           artist: string;
           created_at: string;
           id: string;
@@ -39,6 +59,7 @@ export type Database = {
           status: Database['public']['Enums']['request_status'];
         };
         Insert: {
+          streamer_id: string;
           artist?: string;
           created_at?: string;
           id?: string;
@@ -50,6 +71,7 @@ export type Database = {
           status?: Database['public']['Enums']['request_status'];
         };
         Update: {
+          streamer_id?: string;
           artist?: string;
           created_at?: string;
           id?: string;
@@ -62,24 +84,27 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: 'requests_matched_song_id_fkey';
-            columns: ['matched_song_id'];
+            foreignKeyName: 'requests_song_scope_fkey';
+            columns: ['streamer_id', 'matched_song_id'];
             isOneToOne: false;
             referencedRelation: 'songs';
-            referencedColumns: ['id'];
+            referencedColumns: ['streamer_id', 'id'];
           }
         ];
       };
       settings: {
         Row: {
+          streamer_id: string;
           key: string;
           value: string;
         };
         Insert: {
+          streamer_id: string;
           key: string;
           value: string;
         };
         Update: {
+          streamer_id?: string;
           key?: string;
           value?: string;
         };
@@ -87,6 +112,7 @@ export type Database = {
       };
       songs: {
         Row: {
+          streamer_id: string;
           artist: string;
           created_at: string;
           id: string;
@@ -97,6 +123,7 @@ export type Database = {
           title: string;
         };
         Insert: {
+          streamer_id: string;
           artist: string;
           created_at?: string;
           id?: string;
@@ -107,6 +134,7 @@ export type Database = {
           title: string;
         };
         Update: {
+          streamer_id?: string;
           artist?: string;
           created_at?: string;
           id?: string;
@@ -123,7 +151,8 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      accept_song_request: { Args: { request_id: string }; Returns: string };
+      create_streamer: { Args: { p_id: string; p_slug: string; p_name: string }; Returns: undefined };
+      accept_song_request: { Args: { request_id: string; p_streamer_id: string }; Returns: string };
       consume_request_rate_limit: {
         Args: {
           p_client_key: string;
@@ -134,6 +163,7 @@ export type Database = {
       };
       create_song_request: {
         Args: {
+          p_streamer_id: string;
           p_artist: string;
           p_language: Database['public']['Enums']['song_language'];
           p_message: string;
@@ -142,9 +172,9 @@ export type Database = {
         };
         Returns: undefined;
       };
-      reset_admin_data: { Args: { p_settings: Json }; Returns: undefined };
+      reset_admin_data: { Args: { p_settings: Json; p_streamer_id: string }; Returns: undefined };
       restore_admin_data: {
-        Args: { p_requests: Json; p_settings: Json; p_songs: Json };
+        Args: { p_requests: Json; p_settings: Json; p_songs: Json; p_streamer_id: string };
         Returns: undefined;
       };
     };

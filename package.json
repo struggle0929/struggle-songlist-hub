@@ -1,7 +1,7 @@
 {
   "name": "struggle-songlist-hub",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "Parity-7.0.0",
   "type": "module",
   "scripts": {
@@ -16,9 +16,16 @@
     "db:types": "node scripts/generate-supabase-types.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev:local": "node scripts/dev-local.mjs",
+    "test:tenant-sql": "node scripts/test-tenant-sql.mjs",
+    "test:tenant-http": "node scripts/test-tenant-http.mjs",
+    "test:tenant-ui": "node scripts/test-tenant-ui.mjs",
+    "test:tenants": "npm run test:tenant-context && npm run test:tenant-sql && npm run test:tenant-http && npm run test:tenant-ui",
+    "test:tenant-context": "node scripts/test-tenant-context.mjs"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@sveltejs/adapter-auto": "^7.0.1",
     "@sveltejs/kit": "^2.57.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
@@ -26,6 +33,7 @@
     "@types/node": "^25.6.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
+    "playwright": "^1.63.0",
     "prettier": "^3.8.3",
     "prettier-plugin-svelte": "^3.5.1",
     "prettier-plugin-tailwindcss": "^0.7.2",

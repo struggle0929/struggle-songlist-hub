@@ -1,3 +1,4 @@
+import { tenantId, tenantAssetPath, ownedAsset, assertOwnedAssets, currentContext } from '$lib/server/tenant';
 import { randomUUID } from 'node:crypto';
 import { appearancePaths, parseAppearance } from '$lib/appearance';
 import {
@@ -52,10 +53,22 @@ export const getBackupErrorMessage = (error: unknown) =>
 export async function createExportManifest() {
   const [songs, requests, storedSettings] = await Promise.all([
     fetchSupabasePages<SongRow>((from, to) =>
-      supabaseAdmin.from('songs').select('*').order('created_at').order('id').range(from, to)
+      supabaseAdmin
+        .from('songs')
+        .select('*')
+        .eq('streamer_id', tenantId(true))
+        .order('created_at')
+        .order('id')
+        .range(from, to)
     ),
     fetchSupabasePages<RequestRow>((from, to) =>
-      supabaseAdmin.from('requests').select('*').order('created_at').order('id').range(from, to)
+      supabaseAdmin
+        .from('requests')
+        .select('*')
+        .eq('streamer_id', tenantId(true))
+        .order('created_at')
+        .order('id')
+        .range(from, to)
     ),
     listSettings(pageSettingsReadKeys)
   ]);
@@ -69,11 +82,13 @@ export async function createExportManifest() {
     ...appearancePaths(parseAppearance(storedSettings[pageSettingsKeys.appearance]))
   ].filter((path): path is string => Boolean(path));
   const uniquePaths = [...new Set(paths)];
+  assertOwnedAssets(uniquePaths);
   const data = backupDataSchema.parse({ songs, requests, settings });
   return {
     format: backupFormat,
     version: backupVersion,
     exportedAt: new Date().toISOString(),
+    streamer: { id: tenantId(true), slug: currentContext().streamer!.slug, name: currentContext().streamer!.name },
     data,
     assets: uniquePaths.map((originalPath) => ({
       originalPath,
@@ -83,6 +98,7 @@ export async function createExportManifest() {
 }
 
 export async function prepareImport(input: unknown) {
+  tenantId(true);
   const { assets } = prepareImportSchema.parse(input);
   if (assets.reduce((total, asset) => total + asset.size, 0) > backupMaxTotalAssetBytes)
     throw new UserFacingError('备份素材总大小不能超过 24MB。');
@@ -92,7 +108,7 @@ export async function prepareImport(input: unknown) {
   const bucket = supabaseAdmin.storage.from(settingsAssetBucket);
   const uploads = [];
   for (const asset of assets) {
-    const path = `restores/${restoreId}/${randomUUID()}.${assetExtension[asset.contentType]}`;
+    const path = tenantAssetPath(`restores/${restoreId}/${randomUUID()}.${assetExtension[asset.contentType]}`);
     const { data, error } = await bucket.createSignedUploadUrl(path);
     if (error) {
       if (uploads.length) await bucket.remove(uploads.map((upload) => upload.path));
@@ -118,14 +134,16 @@ const replaceAssetPaths = (settings: BackupData['settings'], replacements: Map<s
 };
 
 export async function completeImport(input: unknown) {
+  tenantId(true);
   const parsed = completeImportSchema.parse(input);
-  const prefix = `restores/${parsed.restoreId}/`;
+  const prefix = tenantAssetPath(`restores/${parsed.restoreId}/`);
+  assertOwnedAssets(parsed.assets.map((asset) => asset.path));
   if (parsed.assets.some((asset) => !asset.path.startsWith(prefix))) throw new UserFacingError('备份素材路径无效。');
   if (new Set(parsed.assets.map((asset) => asset.originalPath)).size !== parsed.assets.length)
     throw new UserFacingError('备份素材映射存在重复。');
   const { data: uploaded, error: listError } = await supabaseAdmin.storage
     .from(settingsAssetBucket)
-    .list(`restores/${parsed.restoreId}`, { limit: 100 });
+    .list(tenantAssetPath(`restores/${parsed.restoreId}`), { limit: 100 });
   if (listError) throw listError;
   const uploadedSizes = new Map((uploaded ?? []).map((file) => [`${prefix}${file.name}`, Number(file.metadata?.size)]));
   if (parsed.assets.some((asset) => uploadedSizes.get(asset.path) !== asset.size))
@@ -148,6 +166,7 @@ export async function completeImport(input: unknown) {
     throw new UserFacingError('备份文件缺少页面配置引用的素材。');
 
   const { error } = await supabaseAdmin.rpc('restore_admin_data', {
+    p_streamer_id: tenantId(true),
     p_songs: parsed.data.songs as unknown as Json,
     p_requests: parsed.data.requests as unknown as Json,
     p_settings: Object.fromEntries(settings.map((setting) => [setting.key, setting.value]))
@@ -155,7 +174,7 @@ export async function completeImport(input: unknown) {
   if (error) throw error;
   const keep = new Set(parsed.assets.map((asset) => asset.path));
   const unusedNewPaths = (uploaded ?? []).map((file) => `${prefix}${file.name}`).filter((path) => !keep.has(path));
-  const removePaths = [...new Set([...oldPaths, ...unusedNewPaths])];
+  const removePaths = [...new Set([...oldPaths.filter(ownedAsset), ...unusedNewPaths])];
   if (removePaths.length) {
     const { error: removeError } = await supabaseAdmin.storage.from(settingsAssetBucket).remove(removePaths);
     if (removeError) console.warn('删除导入前的旧素材失败：', removeError);
@@ -164,9 +183,10 @@ export async function completeImport(input: unknown) {
 }
 
 export async function cleanupImport(input: unknown) {
+  tenantId(true);
   const restoreId = typeof input === 'object' && input && 'restoreId' in input ? String(input.restoreId) : '';
   if (!/^[0-9a-f-]{36}$/i.test(restoreId)) return;
-  const folder = `restores/${restoreId}`;
+  const folder = tenantAssetPath(`restores/${restoreId}`);
   const { data } = await supabaseAdmin.storage.from(settingsAssetBucket).list(folder, { limit: 100 });
   const settings = await listSettings(pageSettingsReadKeys);
   const referenced = new Set(

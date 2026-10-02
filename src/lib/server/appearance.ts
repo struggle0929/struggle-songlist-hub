@@ -1,3 +1,4 @@
+import { tenantAssetPath, ownedAsset, tenantId } from '$lib/server/tenant';
 import { randomUUID } from 'node:crypto';
 import {
   appearancePaths,
@@ -38,12 +39,23 @@ export async function saveHeaderText(form: FormData) {
 }
 
 export async function saveAppearance(form: FormData) {
+  tenantId(true);
   const mode = form.get('cursorMode');
   if (!['inherit', 'system', 'static', 'animated'].includes(String(mode)))
     throw new UserFacingError('请选择鼠标指针模式。');
   const existing = parseAppearance((await listSettings([pageSettingsKeys.appearance]))[pageSettingsKeys.appearance]);
   const next = structuredClone(existing);
   next.mode = mode as CursorMode | 'inherit';
+  for (const [key, limit] of [
+    ['siteTitle', 80],
+    ['siteDescription', 300],
+    ['tagline', 200]
+  ] as const) {
+    const raw = form.get(key);
+    if (raw === null) continue;
+    if (typeof raw !== 'string' || raw.trim().length > limit) throw new UserFacingError('页面文字超出允许长度。');
+    next[key] = raw.trim();
+  }
   const uploads: { path: string; file: File }[] = [];
 
   const prepareImage = async (name: string, label: string, gif: boolean, cursor: boolean) => {
@@ -81,7 +93,7 @@ export async function saveAppearance(form: FormData) {
         offset += length + 12;
       }
     }
-    const path = `appearance/${randomUUID()}.${gif ? 'gif' : 'png'}`;
+    const path = tenantAssetPath(`appearance/${randomUUID()}.${gif ? 'gif' : 'png'}`);
     uploads.push({ path, file });
     return path;
   };
@@ -136,7 +148,7 @@ export async function saveAppearance(form: FormData) {
     throw error;
   }
   const kept = new Set(appearancePaths(next));
-  const removed = appearancePaths(existing).filter((path) => !kept.has(path));
+  const removed = appearancePaths(existing).filter((path) => ownedAsset(path) && !kept.has(path));
   if (removed.length) {
     const { error } = await bucket.remove(removed);
     if (error) console.warn('删除旧外观图片失败：', error);

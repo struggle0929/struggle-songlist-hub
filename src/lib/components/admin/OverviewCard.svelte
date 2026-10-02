@@ -32,8 +32,8 @@
         use:enhance={pendingEnhance(
           'reset',
           resetConfirmation.before({
-            title: '确认清空全部歌曲和愿望单？',
-            description: '此操作会重置歌曲、愿望单和页面配置，且不可撤销。',
+            title: '确认清空当前主播的歌曲和愿望单？',
+            description: '此操作仅重置当前主播的歌曲、愿望单和页面配置，其他主播不受影响。建议先导出备份。',
             confirmLabel: '确认重置',
             tone: 'danger'
           })

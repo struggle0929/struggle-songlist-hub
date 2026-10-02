@@ -1,3 +1,7 @@
+import { env } from '$env/dynamic/public';
+import { emptyCatalog, listStreamers } from '$lib/server/streamers';
+import { streamerUrl } from '$lib/streamers';
+import { adminPath } from '$lib/server/tenant';
 import { saveAppearance, saveHeaderText, readBackgroundBlur, saveBackgroundBlur } from '$lib/server/appearance';
 import { fail, redirect } from '@sveltejs/kit';
 
@@ -37,9 +41,27 @@ import type { Actions, PageServerLoad } from './$types';
 const avatarMaxBytes = 2 * 1024 * 1024;
 const backgroundMaxBytes = 5 * 1024 * 1024;
 
-export const load: PageServerLoad = async () => ({
-  dashboard: await getAdminDashboardData()
-});
+export const load: PageServerLoad = async ({ locals, url }) => {
+  void url.pathname;
+  void url.hostname;
+  return {
+    dashboard: locals.streamer
+      ? await getAdminDashboardData()
+      : {
+          songs: [],
+          requests: [],
+          overview: { totalSongs: 0, publicSongs: 0, pendingRequests: 0 },
+          settings: emptyCatalog().settings
+        },
+    isHub: !locals.streamer,
+    streamers: locals.streamer
+      ? []
+      : (await listStreamers(true)).map((s) => ({
+          ...s,
+          href: streamerUrl(s.slug, url, env.PUBLIC_ROOT_DOMAIN || 'xs0929.cn', '/admin')
+        }))
+  };
+};
 
 export const actions: Actions = {
   saveHeader: async ({ request }) => {
@@ -339,7 +361,7 @@ export const actions: Actions = {
 
   logout: async ({ cookies }) => {
     clearAdminSession(cookies);
-    redirect(303, '/admin/login');
+    redirect(303, adminPath('/admin/login'));
   },
 
   saveAppearance: async ({ request }) => {

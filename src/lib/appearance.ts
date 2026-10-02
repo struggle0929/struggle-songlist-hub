@@ -14,6 +14,9 @@ export const staticStates = cursorStates.slice(0, 3);
 export const defaultFavicon = '/favicon.svg';
 export type CursorAsset = { file: string; hotspot: [number, number] };
 export type Appearance = {
+  siteTitle: string;
+  siteDescription: string;
+  tagline: string;
   headerTitle: string;
   headerSubtitle: string;
   backgroundBlur: number;
@@ -28,6 +31,9 @@ export const defaultHeaderTitle = '';
 export const defaultHeaderSubtitle = '';
 export const defaultBackgroundBlur = 16;
 export const emptyAppearance = (): Appearance => ({
+  siteTitle: '',
+  siteDescription: '',
+  tagline: '',
   headerTitle: defaultHeaderTitle,
   headerSubtitle: defaultHeaderSubtitle,
   backgroundBlur: defaultBackgroundBlur,
@@ -67,6 +73,9 @@ export function parseAppearance(value: string | undefined): Appearance {
     const raw = JSON.parse(value);
     if (!raw || typeof raw !== 'object') return result;
     for (const [key, limit] of [
+      ['siteTitle', 80],
+      ['siteDescription', 300],
+      ['tagline', 200],
       ['headerTitle', 40],
       ['headerSubtitle', 80]
     ] as const) {

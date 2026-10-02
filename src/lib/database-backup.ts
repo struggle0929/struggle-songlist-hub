@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const backupFormat = 'struggle-songlist-qk-backup';
-export const backupVersion = 1;
+export const backupVersion = 2;
 export const backupMaxAssets = 20;
 export const backupMaxAssetBytes = 5 * 1024 * 1024;
 export const backupMaxTotalAssetBytes = 24 * 1024 * 1024;
@@ -73,12 +73,14 @@ export const backupAssetSchema = z.object({
 export const backupFileSchema = z
   .object({
     format: z.literal(backupFormat),
-    version: z.literal(backupVersion),
+    version: z.union([z.literal(1), z.literal(backupVersion)]),
+    streamer: z.object({ id: z.string().uuid(), slug: z.string(), name: z.string() }).optional(),
     exportedAt: timestamp,
     data: backupDataSchema,
     assets: z.array(backupAssetSchema).max(backupMaxAssets)
   })
-  .superRefine(({ assets }, ctx) => {
+  .superRefine(({ assets, version, streamer }, ctx) => {
+    if (version === 2 && !streamer) ctx.addIssue({ code: 'custom', message: '新版备份缺少主播标识。' });
     if (new Set(assets.map((asset) => asset.originalPath)).size !== assets.length)
       ctx.addIssue({ code: 'custom', message: '备份素材路径存在重复。' });
     if (assets.reduce((total, asset) => total + asset.size, 0) > backupMaxTotalAssetBytes)

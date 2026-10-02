@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StreamerDirectory from '$lib/components/StreamerDirectory.svelte';
   import { branding } from '$lib/branding';
   import { mergeTags } from '$lib/tags';
   import AddSongPanel from '$lib/components/admin/AddSongPanel.svelte';
@@ -60,45 +61,51 @@
 </script>
 
 <svelte:head>
-  <title>后台管理 | {branding.title}</title>
+  <title>后台管理 | {data.siteTitle}</title>
 </svelte:head>
 
-<div class="space-y-6">
-  <OverviewCard
-    overview={data.dashboard.overview}
-    onOpenDataSettings={() => (dataSettingsModalOpen = true)}
-    onOpenSettings={() => (settingsModalOpen = true)}
-  />
+{#if data.isHub}
+  <StreamerDirectory streamers={data.streamers} managed />
+  {#if data.isPlatformAdmin}<a class="button button-primary mt-4" href="/admin/streamers">管理主播与账号授权</a>{/if}
+  <form method="POST" action="?/logout" class="mt-4"><button class="button" type="submit">退出登录</button></form>
+{:else}
+  <div class="space-y-6">
+    <OverviewCard
+      overview={data.dashboard.overview}
+      onOpenDataSettings={() => (dataSettingsModalOpen = true)}
+      onOpenSettings={() => (settingsModalOpen = true)}
+    />
 
-  <Tabs.Root bind:value={activeTab} class="space-y-5">
-    <Tabs.List class="admin-tabs-list inline-flex">
-      <Tabs.Trigger value="songs" class="admin-tab-trigger">
-        歌曲 <span class="admin-tab-count">{data.dashboard.songs.length}</span>
-      </Tabs.Trigger>
-      <Tabs.Trigger value="requests" class="admin-tab-trigger">
-        愿望单 <span class="admin-tab-count">{data.dashboard.requests.length}</span>
-      </Tabs.Trigger>
-    </Tabs.List>
+    <Tabs.Root bind:value={activeTab} class="space-y-5">
+      <Tabs.List class="admin-tabs-list inline-flex">
+        <Tabs.Trigger value="songs" class="admin-tab-trigger">
+          歌曲 <span class="admin-tab-count">{data.dashboard.songs.length}</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="requests" class="admin-tab-trigger">
+          愿望单 <span class="admin-tab-count">{data.dashboard.requests.length}</span>
+        </Tabs.Trigger>
+      </Tabs.List>
 
-    <Tabs.Content value="songs" class="grid items-start gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-      <AddSongPanel bind:active={addPanelActive} {form} {tags} />
-      <SongListCard songs={data.dashboard.songs} />
-    </Tabs.Content>
+      <Tabs.Content value="songs" class="grid items-start gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <AddSongPanel bind:active={addPanelActive} {form} {tags} />
+        <SongListCard songs={data.dashboard.songs} />
+      </Tabs.Content>
 
-    <Tabs.Content value="requests">
-      <RequestListCard requests={data.dashboard.requests} />
-    </Tabs.Content>
-  </Tabs.Root>
-</div>
+      <Tabs.Content value="requests">
+        <RequestListCard requests={data.dashboard.requests} />
+      </Tabs.Content>
+    </Tabs.Root>
+  </div>
 
-<SettingsModal settings={data.dashboard.settings} adminError={settingsError} bind:open={settingsModalOpen} />
-<DataSettingsModal bind:open={dataSettingsModalOpen} />
+  <SettingsModal settings={data.dashboard.settings} adminError={settingsError} bind:open={settingsModalOpen} />
+  <DataSettingsModal bind:open={dataSettingsModalOpen} />
 
-{#if hasImportPreview(form) && !importModalDismissed}
-  <NeteaseImportModal
-    preview={form.importPreview}
-    {tags}
-    adminError={importError}
-    onClose={() => (importModalDismissed = true)}
-  />
+  {#if hasImportPreview(form) && !importModalDismissed}
+    <NeteaseImportModal
+      preview={form.importPreview}
+      {tags}
+      adminError={importError}
+      onClose={() => (importModalDismissed = true)}
+    />
+  {/if}
 {/if}

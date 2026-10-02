@@ -2,11 +2,14 @@
   import { enhance } from '$app/forms';
   import type { SubmitFunction } from '@sveltejs/kit';
   import { cursorLabels, cursorStates, staticStates, resolveHeaderText, type Appearance } from '$lib/appearance';
+  import { page } from '$app/state';
   import { branding } from '$lib/branding';
   import AppearanceUpload from './AppearanceUpload.svelte';
   import { pendingActions } from '$lib/pending.svelte';
   let { appearance }: { appearance: Appearance } = $props();
-  const headerText = $derived(resolveHeaderText(appearance, branding));
+  const headerText = $derived(
+    resolveHeaderText(appearance, { ...branding, title: page.data.streamer?.name || branding.title })
+  );
   let mode = $state<Appearance['mode']>('inherit');
   let pending = $state(false);
   let revision = $state(0);
@@ -36,6 +39,36 @@
   <form method="POST" action="?/saveAppearance" enctype="multipart/form-data" class="space-y-4" use:enhance={submit}>
     <fieldset disabled={pending} class="space-y-4">
       {#key revision}
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="field-label"
+            ><span>浏览器标题</span><input
+              name="siteTitle"
+              class="form-field"
+              maxlength="80"
+              value={appearance.siteTitle}
+              placeholder={page.data.streamer?.name || branding.title}
+            /></label
+          >
+          <label class="field-label"
+            ><span>首页说明</span><input
+              name="tagline"
+              class="form-field"
+              maxlength="200"
+              value={appearance.tagline}
+              placeholder={branding.tagline}
+            /></label
+          >
+          <label class="field-label sm:col-span-2"
+            ><span>网页描述</span><input
+              name="siteDescription"
+              class="form-field"
+              maxlength="300"
+              value={appearance.siteDescription}
+              placeholder={page.data.siteDescription}
+            /></label
+          >
+        </div>
+        <p class="text-xs text-[var(--color-text-muted)]">上述文字随本区域保存，仅应用于当前主播；留空使用默认值。</p>
         <div class="grid gap-3 sm:grid-cols-2">
           <AppearanceUpload name="logo" label="页面左上角图片替换" current={appearance.logo} />
           <AppearanceUpload name="favicon" label="网址图标（favicon）" current={appearance.favicon} />

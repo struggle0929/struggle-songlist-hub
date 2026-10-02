@@ -1,32 +1,22 @@
 // Live metadata previews only. The final import POST is intercepted; no song data is written.
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { loginTestPage, testBase } from './lib/ui-login.mjs';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { stringify } from 'devalue';
 
 const { chromium } = await import(process.argv[2] ? pathToFileURL(process.argv[2]).href : 'playwright');
-if (!process.env.AUTH_SECRET) throw new Error('Run with --env-file=.env');
 const browser = await chromium.launch({ headless: true, channel: 'msedge' });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  const payload = `admin:${Date.now()}`;
-  await context.addCookies([
-    {
-      name: 'songlist_admin_session',
-      value: payload + '.' + createHmac('sha256', process.env.AUTH_SECRET).update(payload).digest('hex'),
-      url: 'http://127.0.0.1:5173',
-      httpOnly: true,
-      sameSite: 'Lax'
-    }
-  ]);
   const page = await context.newPage();
+  await loginTestPage(page);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   let imported;
   await page.route(
-    (url) => url.pathname === '/admin' && url.search.includes('importPlaylist'),
+    (url) => url.pathname === new URL(testBase + '/admin').pathname && url.search.includes('importPlaylist'),
     async (route) => {
       if (route.request().method() !== 'POST') return route.continue();
       if (!route.request().url().includes('importPlaylist')) return route.continue();
@@ -38,7 +28,7 @@ try {
       });
     }
   );
-  await page.goto('http://127.0.0.1:5173/admin', { waitUntil: 'networkidle' });
+  await page.goto(testBase + '/admin', { waitUntil: 'networkidle' });
   for (const [provider, label, kind, url, count, title] of [
     ['netease', '网易云', 'song', 'https://music.163.com/#/song?id=186016', 1, '晴天'],
     ['kugou', '酷狗', 'song', 'https://m.kugou.com/share/song.html?chain=AajH2eG6V2', 1, '月光河畔'],

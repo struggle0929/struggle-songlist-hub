@@ -1,115 +1,116 @@
 # struggle-songlist-hub
 
-多主播共用歌单平台的开发仓库，基于 SvelteKit、Svelte 和 Supabase。目标为 **一个 Vercel 项目 + 一个 Supabase 项目 + 同域名下不同主播路径**，统一更新程序，每位主播拥有独立歌曲、愿望单、页面配置和后台授权。
+多主播共用歌单，基于 SvelteKit、Svelte 和 Supabase。**一个 Vercel 项目 + 一个 Supabase 项目 + 按主播子域名分流**，程序部署一次，所有主播共同更新。
 
-**当前阶段：代码复制完成，尚未实现多主播隔离。** 2026 年 10 月 3 日从 [struggle-songlist-qk](https://github.com/struggle0929/struggle-songlist-qk) 的 `91f58931ca4863765e94c3be0e2b30be8ec204eb` 导入代码及其 7 个提交。本次只更改项目名称和文档，`src/`、`static/`、`scripts/`、`supabase/` 与来源提交一致。
+当前版本 `0.2.0`：已实现多主播隔离、账号授权、平台创建歌单、独立页面配置和按主播备份恢复，完成本地测试。线上迁移、Vercel 绑定和 xs0929.cn DNS 尚未执行。
 
-## 域名与目标入口
+## 域名与入口
 
-预计使用 `xs0929.cn`，以主播稳定英文标识作为路径：
+主播名称前置，使用稳定英文标识作为子域名，显示昵称可单独修改。
 
-| 入口       | 目标地址（尚未实现）                |
-| ---------- | ----------------------------------- |
-| 歌单目录   | `https://xs0929.cn/`                |
-| Siro0 歌单 | `https://xs0929.cn/siro0`           |
-| 薰薰兔歌单 | `https://xs0929.cn/xunxuntu`        |
-| 主播后台   | `https://xs0929.cn/siro0/admin`     |
-| 统一登录   | `https://xs0929.cn/admin/login`     |
-| 平台管理   | `https://xs0929.cn/admin/streamers` |
+| 入口           | 正式地址示例                                    |
+| -------------- | ----------------------------------------------- |
+| 平台目录       | `https://xs0929.cn/`                            |
+| Siro0 歌单     | `https://siro0.xs0929.cn/`                      |
+| Siro0 登录     | `https://siro0.xs0929.cn/admin/login`           |
+| Siro0 后台     | `https://siro0.xs0929.cn/admin`                 |
+| Siro0 备份接口 | `https://siro0.xs0929.cn/admin/database/export` |
+| 薰薰兔歌单     | `https://xunxuntu.xs0929.cn/`                   |
+| 平台登录       | `https://xs0929.cn/admin/login`                 |
+| 主播与账号管理 | `https://xs0929.cn/admin/streamers`             |
 
-`https://主播名称/xs0929.cn` 会把主播名称当作主机名，不是预期的地址。路径方案为 `https://xs0929.cn/主播标识`；子域名方案为 `https://主播标识.xs0929.cn`。本仓库按本次指定的路径方案规划，子域名识别留作可选扩展。
+`https://siro0/xs0929.cn` 会将 siro0 当作主机名，不能作为 xs0929.cn 的子域名。正确格式为 `https://siro0.xs0929.cn`。
 
-当前实际入口仍为前台 `/`、登录 `/admin/login`、后台 `/admin`，没有 `/siro0` 等主播路由。
+本地支持 `http://siro0.localhost:5173/`，同时提供 `/s/siro0` 路径入口，便于不支持 localhost 子域名的环境和 Vercel 预览测试。正式分发地址优先使用子域名。
 
-## 保留功能
+## 立即进行本地实验
 
-- 搜索、语言与标签筛选、排序、状态展示、点击复制、筛选内随机选歌。
-- 手机布局与字体适配、手机随机不跳转、愿望单直达、置顶置底。
-- 后台添加、编辑、删除、批量标签、已有标签选择、状态搜索与导入次序排序。
-- 网易云、酷狗、QQ 音乐单曲及公开歌单分享链接识别、预览、选择导入，不下载音频。
-- 愿望单提交、处理及请求限流。
-- 首页标题、导航小标题与副标题、Bilibili 地址、头像、背景及 0～40px 模糊度。
-- 导航图标、favicon、静态与动态鼠标指针、热点设置和自动回退。
-- JSON 备份与恢复，包括歌曲、愿望单、页面配置及引用素材，不包含管理员账号。
-- 本地只读演示与现有回归测试脚本。
-
-## 当前权限与数据库边界
-
-当前会话只记录管理员状态，没有用户 ID 和主播授权；任何可通过当前 Supabase Auth 登录的账号均可管理整个歌单。歌曲、愿望单没有主播归属，页面设置为全局配置，重置和恢复覆盖整库业务数据。
-
-当前版本只适合单主播基线验证。不要将多个主播备份依次恢复到同一数据库，也不要在 Siro0 正式项目执行初始化、重置或恢复来试验多主播。全部隔离完成并验证后再迁移。
-
-完整修改清单见 [多主播改造计划](MULTI_TENANT_PLAN.md)，部署与迁移顺序见 [部署说明](DEPLOYMENT.md)，本次实际修改和来源历史见 [更新日志](更新日志.md)。
-
-## 本地开发
-
-使用 Node.js 20.19+ 或 22.12+，本次初始化环境为 Node.js 22.20.0。
+使用 Node.js 20.19+ 或 22.12+（已在 Node.js 22.20.0 验证）：
 
 ```powershell
 Set-Location D:\Github\struggle-songlist-hub
 npm ci
-Copy-Item .env.example .env
-npm run dev -- --host 127.0.0.1 --port 5173
+npm run dev:local
 ```
 
-首次复制 `.env` 后填写配置，已有 `.env` 时不要覆盖。源仓库的 `.env`、依赖目录、缓存及云平台绑定未复制。
+该脚本覆盖连接变量，启动本机内存 PostgreSQL（PGlite）及模拟 Supabase Auth/Storage 服务，不读取正式数据库的数据，不需要 .env、Docker 或云平台账号。关闭进程后实验数据全部清空，重新运行恢复初始示例。
 
-没有测试数据库时，可在本地 `.env` 设置：
+| 本地入口           | 地址                                                                         |
+| ------------------ | ---------------------------------------------------------------------------- |
+| 平台目录           | `http://127.0.0.1:5173/`                                                     |
+| 平台管理登录       | `http://127.0.0.1:5173/admin/login`                                          |
+| 平台主播与账号管理 | `http://127.0.0.1:5173/admin/streamers`                                      |
+| Siro0 歌单         | `http://siro0.localhost:5173/` 或 `http://127.0.0.1:5173/s/siro0`            |
+| Siro0 后台         | `http://siro0.localhost:5173/admin` 或 `http://127.0.0.1:5173/s/siro0/admin` |
+| 薰薰兔歌单         | `http://xunxuntu.localhost:5173/` 或 `http://127.0.0.1:5173/s/xunxuntu`      |
 
-```dotenv
-PUBLIC_SUPABASE_URL=https://example.supabase.co
-PUBLIC_SUPABASE_PUBLISHABLE_KEY=local-demo-publishable-key
-SUPABASE_SECRET_KEY=local-demo-secret-key
-AUTH_SECRET=local-demo-only-replace-before-real-use
-LOCAL_DEMO=true
-```
+本地测试账号密码均为 **`Local-only-0929!`**，仅用于这个内存实验环境：
 
-演示仅在开发服务器生效，使用六首示例歌曲并阻止提交和登录。生产构建不启用演示；后台写操作须使用独立测试数据库或本地 Supabase。
+| 账号                  | 权限                                                             |
+| --------------------- | ---------------------------------------------------------------- |
+| `platform@local.test` | 平台管理员，创建歌单、创建/关联账号、分配/撤销授权、管理全部主播 |
+| `siro0@local.test`    | 仅管理 Siro0                                                     |
+| `xunxuntu@local.test` | 仅管理薰薰兔                                                     |
+| `outsider@local.test` | 无任何歌单权限，用于拒绝访问测试                                 |
 
-## 环境变量
+建议先登录平台管理员，创建新歌单并分配账号，再登录主播账号添加歌曲、修改外观、导出/恢复备份；检查另一个主播的数据不受影响。本地开发脚本只监听 127.0.0.1，不用于生产部署。
 
-| 变量                                              | 用途                                           |
-| ------------------------------------------------- | ---------------------------------------------- |
-| `PUBLIC_SUPABASE_URL`                             | Supabase 项目 URL                              |
-| `PUBLIC_SUPABASE_PUBLISHABLE_KEY`                 | 可公开的 publishable key                       |
-| `SUPABASE_SECRET_KEY`                             | 仅服务端使用的 secret key                      |
-| `AUTH_SECRET`                                     | 管理员会话签名随机串，真实环境建议至少 32 字节 |
-| `LOCAL_DEMO`                                      | 开发服务器只读演示                             |
-| `PUBLIC_SITE_TITLE` / `PUBLIC_SITE_SUBTITLE`      | 部署默认标题与导航副标题                       |
-| `PUBLIC_SITE_DESCRIPTION` / `PUBLIC_SITE_TAGLINE` | 部署网页描述与首页说明                         |
-| `PUBLIC_SITE_ICON`                                | 部署默认图标                                   |
-| `PUBLIC_CUSTOM_CURSORS` / `PUBLIC_CURSOR_*`       | 可选部署默认动态指针                           |
+## 保留与新增功能
 
-完整示例见 [.env.example](.env.example)。当前品牌变量作用于整个部署；未来只作为平台默认值，各主播配置按主播 ID 读取。本次不新增尚未生效的主播环境变量。
+保留搜索、语言与标签筛选、歌曲状态、点击复制、筛选内随机选歌、手机随机不跳转、愿望单直达、置顶置底、手机字体适配、歌曲编辑和批量标签、后台状态搜索及排序、网易云/酷狗/QQ 音乐单曲和歌单解析预览导入、愿望处理与限流、头像背景、导航文字、图标/favicon、静态/动态指针及热点、完整 JSON 备份恢复。
 
-真实环境生成会话密钥：
+新增：
 
-```powershell
-node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
-```
+- 主播目录、子域名识别、路径预览入口，无效或停用歌单不读取其他主播。
+- 平台后台创建/编辑/停用歌单、创建或关联账号、授予/撤销权限。
+- 真实账号会话与每次请求重新授权；平台管理员和主播管理员分离。
+- 歌曲、愿望、统计、标签、设置、素材、导入导出、重置和恢复全部按主播隔离。
+- 各主播独立浏览器标题、网页描述与首页说明，在页面配置中设置，留空使用默认值。
+- v2 备份包含来源主播信息，兼容 v1 旧歌单备份；导入目标由当前授权歌单决定，不信任备份中的主播 ID。
 
-## 常用脚本
+一次更新程序覆盖同一部署的全部主播；新增主播在后台创建记录和授权即可。数据库结构变更仍需对共享项目执行对应迁移。
 
-| 命令                                      | 用途                           |
-| ----------------------------------------- | ------------------------------ |
-| `npm run dev`                             | 开发服务器                     |
-| `npm run check`                           | TypeScript 与 Svelte 检查      |
-| `npm run build` / `npm run preview`       | 生产构建 / 构建预览            |
-| `npm run test:appearance`                 | 页面外观与素材存储回归         |
-| `npm run test:backup`                     | 备份恢复与素材回归             |
-| `npm run test:tags`                       | 标签、批量追加及排序回归       |
-| `npm run test:music-import`               | 音乐链接与解析回归             |
-| `npm run db:types`                        | 生成当前 `.env` 对应数据库类型 |
-| `npm run format` / `npm run format:check` | 格式化 / 格式检查              |
+## 权限与素材
 
-四项回归使用模拟数据库或请求。`scripts/test-*-ui.mjs` 浏览器脚本需额外准备 Playwright、本地服务器及测试配置，本次不新增浏览器依赖。Husky 提交钩子对暂存文件执行 Prettier。
+登录会话使用签名 HttpOnly cookie，并向 Supabase 校验身份，支持 token 刷新。每次后台请求重新检查主播授权和平台角色，撤权后下次请求失效。cookie 不跨子域名共享，第一次进入另一个主播子域名需在该域名登录。
 
-## 统一更新与新增主播
+服务端特权查询显式限定主播 ID，匿名/普通登录数据库角色不能直接读取授权或愿望数据、调用修改 RPC。素材新路径为 `site-assets/<streamer UUID>/...`；Siro0 升级前的 profile/appearance/restores 旧路径只归属迁移后的 Siro0，避免旧图片失效。
 
-多主播版完成后，程序更新并部署一次，所有主播同时获得更新；数据库结构变化仍须在共享项目执行一次迁移。
+## 使用真实测试数据库
 
-新增主播的目标流程为：平台管理员在后台创建歌单、配置标识、创建或选择账号、分配权限，无需新增仓库、Vercel 或 Supabase 项目。此管理流程尚未实现。
+复制 .env.example 为 .env，填写独立测试项目的变量，应用数据库脚本并初始化授权后运行 `npm run dev`。已有 .env 时不要覆盖。此模式的后台操作会真实修改连接的数据库。
+
+| 变量                                | 用途                                 |
+| ----------------------------------- | ------------------------------------ |
+| `PUBLIC_SUPABASE_URL`               | 共享 Supabase URL                    |
+| `PUBLIC_SUPABASE_PUBLISHABLE_KEY`   | 可公开的 publishable key             |
+| `SUPABASE_SECRET_KEY`               | 仅服务端使用的 secret key            |
+| `AUTH_SECRET`                       | 会话签名随机串，生产建议至少 32 字节 |
+| `PUBLIC_ROOT_DOMAIN`                | 子域名主域，默认 xs0929.cn           |
+| `PUBLIC_SITE_*` / `PUBLIC_CURSOR_*` | 平台品牌和指针默认值，主播设置优先   |
+| `LOCAL_DEMO`                        | 原有只读演示，仅开发模式生效         |
+
+空库初始化使用 supabase/schema.sql，已有 Siro0 使用 20261003_multi_streamer.sql 增量迁移，**不能重跑初始化脚本升级**。初始化平台管理员及线上切换见 [部署说明](DEPLOYMENT.md)。
+
+## 验证命令
+
+| 命令                                                                          | 用途                                                |
+| ----------------------------------------------------------------------------- | --------------------------------------------------- |
+| `npm run check`                                                               | TypeScript 与 Svelte 检查                           |
+| `npm run build`                                                               | 生产构建                                            |
+| `npm run test:appearance` / `test:backup` / `test:tags` / `test:music-import` | 原有 33 项回归                                      |
+| `npm run test:tenants`                                                        | 上下文、PostgreSQL、HTTP 和浏览器多主播测试         |
+| `npm run test:tenant-context`                                                 | 并发上下文、素材路径、域名边界                      |
+| `npm run test:tenant-sql`                                                     | 迁移、事务、RLS 和跨主播约束                        |
+| `npm run test:tenant-http`                                                    | 实际本地页面、账号权限及管理接口                    |
+| `npm run test:tenant-ui`                                                      | 浏览器登录、配置、素材上传、备份恢复、桌面/手机布局 |
+
+浏览器测试默认使用已安装的 Microsoft Edge；也可设置 PLAYWRIGHT_CHANNEL=chrome，或安装 Playwright Chromium 后设为 chromium。测试自动启动隔离服务，无需运行 dev:local。SQL/HTTP/UI 测试分别使用内存库，HTTP 和 UI 端口为 5193、5194，不改动实验环境的 5173 数据。
+
+PGlite 与 Playwright 仅为开发依赖。Supabase Auth/Storage 的本地服务是测试替身，云端真实认证、对象存储和 DNS/HTTPS 仍需在正式迁移前联调。
+
+完整代码改动及实施情况见 [多主播实施清单](MULTI_TENANT_PLAN.md)，历史见 [更新日志](更新日志.md)。原依赖审计的 18 项问题另行记录，尚未批量升级运行时依赖。
 
 ## 来源与许可证
 
-基于 QingKong Songlist 和 `struggle-songlist-qk`，完整保留原作者声明及 [Parity Public License 7.0.0](LICENSE)。公开源码并保留通用库提交历史。原单主播库与个人歌单仓库不会自动跟随本仓库更新。
+从 struggle-songlist-qk 的 91f5893 导入代码及原有 7 个提交，保留 QingKong Songlist 原作者声明和 [Parity Public License 7.0.0](LICENSE)。原单主播库和个人歌单不会自动同步此仓库。

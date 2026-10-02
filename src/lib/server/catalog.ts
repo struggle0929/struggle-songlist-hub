@@ -1,3 +1,4 @@
+import { tenantId, ownedAsset, currentContext } from '$lib/server/tenant';
 import { appearancePaths, parseAppearance } from '$lib/appearance';
 import { collectTags, listPublicSongs, listSongs } from '$lib/server/songs';
 import { countPendingRequests, listRequests } from '$lib/server/requests';
@@ -14,7 +15,13 @@ import { type AdminDashboardData, type PublicCatalog } from '$lib/types';
 import { getDemoCatalog, localDemo } from '$lib/server/demo';
 
 export const getPublicCatalog = async (): Promise<PublicCatalog> => {
-  if (localDemo) return getDemoCatalog();
+  if (localDemo) {
+    const catalog = getDemoCatalog();
+    return {
+      ...catalog,
+      settings: { ...catalog.settings, heroTitle: currentContext().streamer?.name || catalog.settings.heroTitle }
+    };
+  }
   const [songs, settings] = await Promise.all([listPublicSongs(), getSettings()]);
 
   return {
@@ -45,9 +52,12 @@ export const resetDatabase = async () => {
     settings[pageSettingsKeys.avatarPath],
     settings[pageSettingsKeys.backgroundPath],
     ...appearancePaths(parseAppearance(settings[pageSettingsKeys.appearance]))
-  ].filter(Boolean);
+  ].filter((path) => Boolean(path) && ownedAsset(path));
 
-  const { error } = await supabaseAdmin.rpc('reset_admin_data', { p_settings: pageSettingsDefaults });
+  const { error } = await supabaseAdmin.rpc('reset_admin_data', {
+    p_streamer_id: tenantId(true),
+    p_settings: pageSettingsDefaults
+  });
 
   if (error) {
     throw error;

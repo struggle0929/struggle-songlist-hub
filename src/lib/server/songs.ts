@@ -1,3 +1,5 @@
+import { UserFacingError } from '$lib/server/errors';
+import { tenantId } from '$lib/server/tenant';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '$lib/server/database.types';
@@ -34,6 +36,7 @@ const fetchSongs = async (supabase: SupabaseClient<Database>, isPublic?: boolean
           ? 'id, title, artist, language, status, tags, is_public, created_at'
           : 'id, title, artist, language, status, tags, is_public'
       )
+      .eq('streamer_id', tenantId(isPublic === undefined))
       .order('title', { ascending: true })
       .order('id', { ascending: true })
       .range(from, to);
@@ -70,6 +73,7 @@ export const saveSong = async ({
   isPublic: boolean;
 }) => {
   const row = {
+    streamer_id: tenantId(true),
     title,
     artist,
     language,
@@ -78,25 +82,50 @@ export const saveSong = async ({
     is_public: isPublic
   };
 
-  const { error } = id
-    ? await supabaseAdmin.from('songs').update(row).eq('id', id)
+  const { error, count } = id
+    ? await supabaseAdmin.from('songs').update(row, { count: 'exact' }).eq('streamer_id', tenantId(true)).eq('id', id)
     : await supabaseAdmin.from('songs').insert(row);
 
   if (error) {
     throw error;
   }
+  if (id && count === 0) throw new UserFacingError('歌曲不存在或不属于当前主播。');
 };
 
+async function verifySongIds(ids: string[]) {
+  const unique = [...new Set(ids)];
+  for (let offset = 0; offset < unique.length; offset += 100) {
+    const chunk = unique.slice(offset, offset + 100);
+    const { data, error } = await supabaseAdmin
+      .from('songs')
+      .select('id')
+      .eq('streamer_id', tenantId(true))
+      .in('id', chunk);
+    if (error) throw error;
+    if (data?.length !== chunk.length) throw new UserFacingError('部分歌曲不存在或不属于当前主播。');
+  }
+}
+
 export const deleteSong = async (id: string) => {
-  const { error } = await supabaseAdmin.from('songs').delete().eq('id', id);
+  const { error, count } = await supabaseAdmin
+    .from('songs')
+    .delete({ count: 'exact' })
+    .eq('streamer_id', tenantId(true))
+    .eq('id', id);
 
   if (error) {
     throw error;
   }
+  if (count === 0) throw new UserFacingError('歌曲不存在或不属于当前主播。');
 };
 
 export const bulkDeleteSongs = async (ids: string[]) => {
-  const { error, count } = await supabaseAdmin.from('songs').delete({ count: 'exact' }).in('id', ids);
+  await verifySongIds(ids);
+  const { error, count } = await supabaseAdmin
+    .from('songs')
+    .delete({ count: 'exact' })
+    .eq('streamer_id', tenantId(true))
+    .in('id', ids);
 
   if (error) {
     throw error;
@@ -106,9 +135,11 @@ export const bulkDeleteSongs = async (ids: string[]) => {
 };
 
 export const bulkSetSongsPublic = async (ids: string[], isPublic: boolean) => {
+  await verifySongIds(ids);
   const { error, count } = await supabaseAdmin
     .from('songs')
     .update({ is_public: isPublic }, { count: 'exact' })
+    .eq('streamer_id', tenantId(true))
     .in('id', ids);
 
   if (error) {
@@ -124,7 +155,11 @@ export const bulkAppendSongTags = async (ids: string[], tags: string[]) => {
   // Validate every merged tag set before writing; chunk IDs to keep request URLs small.
   for (let offset = 0; offset < uniqueIds.length; offset += 100) {
     const chunk = uniqueIds.slice(offset, offset + 100);
-    const { data, error } = await supabaseAdmin.from('songs').select('id, title, tags').in('id', chunk);
+    const { data, error } = await supabaseAdmin
+      .from('songs')
+      .select('id, title, tags')
+      .eq('streamer_id', tenantId(true))
+      .in('id', chunk);
     if (error) throw error;
     if (!data || data.length !== chunk.length) throw new Error('部分歌曲已被删除，请刷新列表后重试。');
     for (const song of data) {
@@ -146,6 +181,7 @@ export const bulkAppendSongTags = async (ids: string[], tags: string[]) => {
         const { error, count } = await supabaseAdmin
           .from('songs')
           .update({ tags: group.after }, { count: 'exact' })
+          .eq('streamer_id', tenantId(true))
           .in('id', chunk)
           .contains('tags', group.before)
           .containedBy('tags', group.before);
@@ -174,6 +210,7 @@ export const importSongs = async (
 ) => {
   const { error } = await supabaseAdmin.from('songs').insert(
     songs.map((song) => ({
+      streamer_id: tenantId(true),
       title: song.title,
       artist: song.artist,
       language: song.language,

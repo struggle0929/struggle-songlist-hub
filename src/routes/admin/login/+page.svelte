@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { page } from '$app/state';
   import { branding } from '$lib/branding';
   import { enhance } from '$app/forms';
   import { createLocalPending } from '$lib/pending.svelte';
@@ -11,7 +12,7 @@
 </script>
 
 <svelte:head>
-  <title>管理员登录 | {branding.title}</title>
+  <title>管理员登录 | {page.data.siteTitle}</title>
 </svelte:head>
 
 <div class="flex min-h-[70vh] items-center justify-center">

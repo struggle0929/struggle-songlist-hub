@@ -12,7 +12,9 @@
   import type { LayoutData } from './$types';
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
-  const headerText = $derived(resolveHeaderText(data.appearance, branding));
+  const headerText = $derived(
+    resolveHeaderText(data.appearance, { ...branding, title: data.streamer?.name || branding.title })
+  );
   const cursorConfig = $derived.by(() => {
     const appearance = data.appearance;
     if (appearance.mode === 'inherit') {
@@ -28,8 +30,8 @@
 </script>
 
 <svelte:head>
-  <title>{branding.title}</title>
-  <meta name="description" content={branding.description} />
+  <title>{data.siteTitle}</title>
+  <meta name="description" content={data.siteDescription} />
   <link rel="icon" href={resolveFavicon(data.appearance, branding.icon)} />
 </svelte:head>
 
@@ -56,7 +58,7 @@
     <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 lg:px-6">
       <p class="text-xs text-[var(--color-text-muted)]">
         © {currentYear}
-        {branding.title}
+        {data.siteTitle}
       </p>
       <p class="text-xs text-[var(--color-text-muted)]">由 SvelteKit 驱动</p>
     </div>

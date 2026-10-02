@@ -1,13 +1,14 @@
 import { fail, redirect } from '@sveltejs/kit';
 
 import { loginAdmin, setAdminSession } from '$lib/server/auth';
+import { permissions } from '$lib/server/streamers';
 import { getValidationMessage } from '$lib/server/errors';
 import { loginFormSchema } from '$lib/server/form-schemas';
 
 import type { Actions } from './$types';
 
 export const actions: Actions = {
-  default: async ({ request, cookies }) => {
+  default: async ({ request, cookies, locals }) => {
     const parsed = loginFormSchema.safeParse(await request.formData());
 
     if (!parsed.success) {
@@ -32,7 +33,9 @@ export const actions: Actions = {
       });
     }
 
-    setAdminSession(cookies);
-    redirect(303, '/admin');
+    const access = await permissions(result.userId, locals.streamer?.id);
+    if (locals.streamer && !access.isAdmin) return fail(403, { message: '没有管理此主播的权限。', values: { email } });
+    setAdminSession(cookies, result.session);
+    redirect(303, `${locals.base}/admin`);
   }
 };

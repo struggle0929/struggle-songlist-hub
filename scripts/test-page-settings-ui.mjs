@@ -1,26 +1,16 @@
 // All writes are intercepted; never modifies real settings.
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { loginTestPage, testBase } from './lib/ui-login.mjs';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stringify } from 'devalue';
-const { chromium } = await import(pathToFileURL(process.argv[2]).href);
-if (!process.env.AUTH_SECRET) throw Error('Run with --env-file=.env');
+const { chromium } = await import(process.argv[2] ? pathToFileURL(process.argv[2]).href : 'playwright');
 const browser = await chromium.launch({ headless: true, channel: 'msedge' });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  const payload = `admin:${Date.now()}`;
-  await context.addCookies([
-    {
-      name: 'songlist_admin_session',
-      value: payload + '.' + createHmac('sha256', process.env.AUTH_SECRET).update(payload).digest('hex'),
-      url: 'http://127.0.0.1:5173',
-      httpOnly: true,
-      sameSite: 'Lax'
-    }
-  ]);
   const page = await context.newPage();
+  await loginTestPage(page);
   const errors = [];
   const posts = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -34,7 +24,7 @@ try {
       json: { type: 'success', status: 200, data: stringify({ kind: 'success', adminMessage: 'mock saved' }) }
     });
   });
-  await page.goto('http://127.0.0.1:5173/admin', { waitUntil: 'networkidle' });
+  await page.goto(testBase + '/admin', { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: '页面配置', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.waitFor();
@@ -45,16 +35,14 @@ try {
     await dialog.locator('img[alt="背景预览"]').evaluate((el) => getComputedStyle(el).filter),
     'blur(30px) saturate(1.1)'
   );
-  await dialog
-    .locator('[name="background"]')
-    .setInputFiles({
-      name: 'preview.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9sAAAAASUVORK5CYII=',
-        'base64'
-      )
-    });
+  await dialog.locator('[name="background"]').setInputFiles({
+    name: 'preview.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9sAAAAASUVORK5CYII=',
+      'base64'
+    )
+  });
   assert.ok((await dialog.locator('img[alt="背景预览"]').getAttribute('src')).startsWith('blob:'));
   await dialog.locator('[name="headerTitle"]').fill('标题测试');
   const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('saveHeader'));

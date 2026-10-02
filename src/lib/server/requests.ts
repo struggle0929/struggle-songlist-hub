@@ -1,3 +1,4 @@
+import { tenantId } from '$lib/server/tenant';
 import type { Database } from '$lib/server/database.types';
 import { UserFacingError } from '$lib/server/errors';
 import { fetchSupabasePages } from '$lib/server/pagination';
@@ -34,6 +35,7 @@ export const listRequests = async (): Promise<SongRequest[]> => {
     supabaseAdmin
       .from('requests')
       .select('id, song_title, artist, language, message, requester_name, status, matched_song_id, created_at')
+      .eq('streamer_id', tenantId(true))
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .range(from, to)
@@ -56,6 +58,7 @@ export const createSongRequest = async ({
   requesterName: string | null;
 }) => {
   const { error } = await supabaseAdmin.rpc('create_song_request', {
+    p_streamer_id: tenantId(),
     p_song_title: songTitle,
     p_artist: artist,
     p_language: language,
@@ -73,6 +76,7 @@ export const updateRequestStatus = async ({ id, status }: { id: string; status: 
 
   if (status === 'accepted') {
     const { error } = await supabase.rpc('accept_song_request', {
+      p_streamer_id: tenantId(true),
       request_id: id
     });
 
@@ -90,6 +94,7 @@ export const updateRequestStatus = async ({ id, status }: { id: string; status: 
   const { count, error } = await supabase
     .from('requests')
     .update({ status }, { count: 'exact' })
+    .eq('streamer_id', tenantId(true))
     .eq('id', id)
     .eq('status', 'pending');
 

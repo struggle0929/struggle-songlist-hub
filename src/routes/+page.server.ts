@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
 
+import { env } from '$env/dynamic/public';
+import { emptyCatalog, listStreamers } from '$lib/server/streamers';
+import { streamerUrl } from '$lib/streamers';
 import { fail } from '@sveltejs/kit';
 
 import { inferSongLanguage } from '$lib/language';
@@ -26,9 +29,20 @@ const consumePublicActionRateLimit = (clientAddress: string) =>
     windowMs: requestWindowMs
   });
 
-export const load: PageServerLoad = async () => ({
-  catalog: await getPublicCatalog()
-});
+export const load: PageServerLoad = async ({ locals, url }) => {
+  void url.pathname;
+  void url.hostname;
+  return {
+    catalog: locals.streamer ? await getPublicCatalog() : emptyCatalog(),
+    isHub: !locals.streamer,
+    streamers: locals.streamer
+      ? []
+      : (await listStreamers()).map((s) => ({
+          ...s,
+          href: streamerUrl(s.slug, url, env.PUBLIC_ROOT_DOMAIN || 'xs0929.cn')
+        }))
+  };
+};
 
 export const actions: Actions = {
   parseRequestSong: async ({ request, getClientAddress }) => {

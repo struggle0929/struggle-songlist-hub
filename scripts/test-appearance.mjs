@@ -83,6 +83,14 @@ async function test(name, run) {
   console.log('PASS', name);
 }
 try {
+  const tenant = await server.ssrLoadModule('/src/lib/server/tenant.ts');
+  tenant.tenantContext.enterWith({
+    streamer: { id: '00000000-0000-4000-8000-000000000001', slug: 'siro0', name: 'Siro0', enabled: true },
+    userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    isAdmin: true,
+    isPlatformAdmin: false,
+    base: ''
+  });
   const { saveAppearance, saveHeaderText, saveBackgroundBlur, readBackgroundBlur } = await server.ssrLoadModule(
     '/src/lib/server/appearance.ts'
   );

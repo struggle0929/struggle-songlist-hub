@@ -1,27 +1,17 @@
 // Read-only local browser check. All POST requests are mocked to prevent database writes.
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { loginTestPage, testBase } from './lib/ui-login.mjs';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stringify } from 'devalue';
 
 const { chromium } = await import(process.argv[2] ? pathToFileURL(process.argv[2]).href : 'playwright');
-if (!process.env.AUTH_SECRET) throw new Error('Run node --env-file=.env scripts/test-tags-ui.mjs [playwright path]');
 const browser = await chromium.launch({ headless: true, channel: 'msedge' });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  const payload = `admin:${Date.now()}`;
-  await context.addCookies([
-    {
-      name: 'songlist_admin_session',
-      value: payload + '.' + createHmac('sha256', process.env.AUTH_SECRET).update(payload).digest('hex'),
-      url: 'http://127.0.0.1:5173',
-      httpOnly: true,
-      sameSite: 'Lax'
-    }
-  ]);
   const page = await context.newPage();
+  await loginTestPage(page);
   const errors = [];
   page.on('response', (response) => {
     if (response.status() >= 400) console.error('HTTP error:', response.status(), response.url());
@@ -52,7 +42,7 @@ try {
       : { kind: 'success', adminMessage: 'mock saved' };
     await route.fulfill({ json: { type: 'success', status: 200, data: stringify(data) } });
   });
-  await page.goto('http://127.0.0.1:5173/admin', { waitUntil: 'networkidle' });
+  await page.goto(testBase + '/admin', { waitUntil: 'networkidle' });
   assert.equal(errors.length, 0, errors.join('\n'));
   const detail = page.locator('details').first();
   await detail.locator('summary').click();

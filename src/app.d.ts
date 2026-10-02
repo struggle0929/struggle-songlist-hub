@@ -1,13 +1,7 @@
+import type { TenantContext } from '$lib/server/tenant';
 declare global {
   namespace App {
-    interface Locals {
-      isAdmin: boolean;
-    }
-
-    interface PageData {
-      isAdmin: boolean;
-    }
+    interface Locals extends TenantContext {}
   }
 }
-
 export {};

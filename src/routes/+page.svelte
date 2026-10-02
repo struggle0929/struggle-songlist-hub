@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StreamerDirectory from '$lib/components/StreamerDirectory.svelte';
   import { branding } from '$lib/branding';
   import FilterPanel from '$lib/components/public/FilterPanel.svelte';
   import Hero from '$lib/components/public/Hero.svelte';
@@ -49,41 +50,45 @@
 </script>
 
 <svelte:head>
-  <title>{branding.title}</title>
+  <title>{data.siteTitle}</title>
 </svelte:head>
 
-<div class="space-y-8 lg:space-y-10">
-  <Hero catalog={data.catalog} />
+{#if data.isHub}
+  <StreamerDirectory streamers={data.streamers} />
+{:else}
+  <div class="space-y-8 lg:space-y-10">
+    <Hero catalog={data.catalog} />
 
-  <section class="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-    <FilterPanel
-      tags={data.catalog.tags}
-      total={data.catalog.songs.length}
-      filtered={sortedSongs.length}
-      bind:query
-      bind:language={selectedLanguage}
-      bind:tag={selectedTag}
-      bind:status={selectedStatus}
-      onRandomSong={selectRandomSong}
-    />
+    <section class="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <FilterPanel
+        tags={data.catalog.tags}
+        total={data.catalog.songs.length}
+        filtered={sortedSongs.length}
+        bind:query
+        bind:language={selectedLanguage}
+        bind:tag={selectedTag}
+        bind:status={selectedStatus}
+        onRandomSong={selectRandomSong}
+      />
 
-    <SongTable songs={sortedSongs} bind:titleSortDirection bind:selectedSongId {randomSelectionVersion} />
-  </section>
+      <SongTable songs={sortedSongs} bind:titleSortDirection bind:selectedSongId {randomSelectionVersion} />
+    </section>
 
-  <RequestForm {form} />
-</div>
+    <RequestForm {form} />
+  </div>
 
-<div class="page-jump-controls" aria-label="页面跳转">
-  <button type="button" class="page-jump-button" aria-label="回到页面顶部" title="回到顶部" onclick={scrollToPageTop}>
-    <Icon name="triangle-up" size={14} />
-  </button>
-  <button
-    type="button"
-    class="page-jump-button"
-    aria-label="跳转到页面底部"
-    title="跳转到底部"
-    onclick={scrollToPageBottom}
-  >
-    <Icon name="triangle-down" size={14} />
-  </button>
-</div>
+  <div class="page-jump-controls" aria-label="页面跳转">
+    <button type="button" class="page-jump-button" aria-label="回到页面顶部" title="回到顶部" onclick={scrollToPageTop}>
+      <Icon name="triangle-up" size={14} />
+    </button>
+    <button
+      type="button"
+      class="page-jump-button"
+      aria-label="跳转到页面底部"
+      title="跳转到底部"
+      onclick={scrollToPageBottom}
+    >
+      <Icon name="triangle-down" size={14} />
+    </button>
+  </div>
+{/if}

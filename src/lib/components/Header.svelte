@@ -20,15 +20,16 @@
     persistTheme(isDark);
   };
 
-  const isHome = $derived(page.url.pathname === '/');
-  const isAdminPage = $derived(page.url.pathname.startsWith('/admin'));
+  const base = $derived(page.data.base || '');
+  const isHome = $derived(page.url.pathname === base || page.url.pathname === base + '/');
+  const isAdminPage = $derived(page.url.pathname.startsWith(base + '/admin'));
 </script>
 
 <header
   class="site-header sticky top-0 z-20 border-b border-[var(--color-border-soft)] bg-[var(--color-surface-overlay)] backdrop-blur-xl"
 >
-  <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 lg:px-6">
-    <a href="/" class="flex min-w-0 items-center gap-3">
+  <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3 lg:px-6">
+    <a href={base + '/'} class="flex min-w-0 flex-1 basis-40 items-center gap-3">
       {#if icon}
         <img src={icon} alt="" class="h-9 w-9 shrink-0 rounded-[12px] object-cover shadow-sm" width="36" height="36" />
       {:else}
@@ -42,7 +43,7 @@
       </span>
     </a>
 
-    <nav class="flex items-center gap-1 text-sm">
+    <nav class="flex flex-wrap items-center justify-end gap-1 text-sm [&_a]:whitespace-nowrap">
       <button
         type="button"
         class="button button-ghost button-icon theme-toggle"
@@ -57,15 +58,16 @@
         {/if}
       </button>
 
+      {#if page.data.isPlatformAdmin}<a href={base + '/admin/streamers'} class="button button-small">主播管理</a>{/if}
       {#if !isHome}
         <a href="/" class="button button-primary button-small">公开歌单</a>
       {/if}
 
       {#if !isAdminPage}
         {#if isAdmin}
-          <a href="/admin" class="button button-primary button-small">后台管理</a>
+          <a href={base + '/admin'} class="button button-primary button-small">后台管理</a>
         {:else}
-          <a href="/admin/login" class="button button-primary button-small">后台管理</a>
+          <a href={base + '/admin/login'} class="button button-primary button-small">后台管理</a>
         {/if}
       {/if}
     </nav>
