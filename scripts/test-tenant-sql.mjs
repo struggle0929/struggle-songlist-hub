@@ -41,6 +41,7 @@ try {
   );
   await db.exec(await readFile('supabase/migrations/20261003_multi_streamer.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/20261003_delete_streamer.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261003_account_deletion_guard.sql', 'utf8'));
   await test('legacy upgrade preserves songs, request links and existing Storage keys', async () => {
     assert.equal((await db.query('select streamer_id from songs')).rows[0].streamer_id, A);
     assert.equal((await db.query('select matched_song_id from requests')).rows[0].matched_song_id, songId);
@@ -174,6 +175,18 @@ try {
       (await db.query("select to_regprocedure('public.restore_admin_data(jsonb,jsonb,jsonb)') f")).rows[0].f,
       null
     );
+  });
+  await test('Auth deletion guard protects platform admins and granted accounts, then permits an unassigned account', async () => {
+    const user = '66666666-6666-4666-8666-666666666666';
+    await db.query('insert into auth.users(id) values($1)', [user]);
+    await db.query('insert into platform_admins(user_id) values($1)', [user]);
+    await assert.rejects(db.query('delete from auth.users where id=$1', [user]), /平台管理员/);
+    await db.query('delete from platform_admins where user_id=$1', [user]);
+    await db.query('insert into streamer_members(streamer_id,user_id) values($1,$2)', [B, user]);
+    await assert.rejects(db.query('delete from auth.users where id=$1', [user]), /仍有歌单授权/);
+    await db.query('delete from streamer_members where user_id=$1', [user]);
+    await db.query('delete from auth.users where id=$1', [user]);
+    assert.equal((await db.query('select * from auth.users where id=$1', [user])).rows.length, 0);
   });
   await test('deleting a disabled streamer atomically removes only its records and preserves shared accounts', async () => {
     const beforeA = (await db.query('select * from settings where streamer_id=$1 order by key', [A])).rows;

@@ -198,6 +198,43 @@ export async function revokeAccount(streamerId: string, userId: string) {
   if (error) throw error;
 }
 
+export async function listAccounts(page: number) {
+  requirePlatformAdmin();
+  const [{ data, error }, { data: admins, error: roleError }] = await Promise.all([
+    supabaseAdmin.auth.admin.listUsers({ page, perPage: 25 }),
+    supabaseAdmin.from('platform_admins').select('user_id')
+  ]);
+  if (error) throw new UserFacingError('无法读取登录账号列表，请检查 Auth 服务。');
+  if (roleError) throw roleError;
+  return {
+    page,
+    hasNext: data.users.length === 25,
+    users: data.users.map((user) => ({
+      id: user.id,
+      email: user.email || '',
+      isPlatformAdmin: Boolean(admins?.some((admin) => admin.user_id === user.id))
+    }))
+  };
+}
+
+export async function deleteAccount(userId: string) {
+  const operator = requirePlatformAdmin();
+  if (userId === operator) throw new UserFacingError('不能删除当前登录账号。');
+  const [{ data: admin, error: roleError }, { data: members, error: memberError }] = await Promise.all([
+    supabaseAdmin.from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle(),
+    supabaseAdmin.from('streamer_members').select('streamer_id').eq('user_id', userId)
+  ]);
+  if (roleError) throw roleError;
+  if (memberError) throw memberError;
+  if (admin) throw new UserFacingError('平台管理员账号不能删除。');
+  if (members?.length) throw new UserFacingError('账号仍有歌单授权，请先撤销全部授权（包括停用的歌单）。');
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+  if (error)
+    throw new UserFacingError(
+      '账号删除失败，账号未删除。请检查是否仍有授权或拥有 Storage 文件，并查看 Supabase Auth 日志。'
+    );
+}
+
 export function emptyCatalog() {
   const catalog = getDemoCatalog();
   return { ...catalog, songs: [], tags: [] };

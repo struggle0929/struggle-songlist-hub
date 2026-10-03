@@ -7,6 +7,8 @@ import {
   assignAccount,
   revokeAccount,
   deleteStreamer,
+  listAccounts,
+  deleteAccount,
   listMembers,
   listStreamers
 } from '$lib/server/streamers';
@@ -17,13 +19,24 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
   requirePlatformAdmin();
-  const [streamers, members] = await Promise.all([listStreamers(true), listMembers()]);
+  const accountPage = Math.max(1, Math.min(100000, Number.parseInt(url.searchParams.get('accountPage') || '1') || 1));
+  const [streamers, members, accountResult] = await Promise.all([
+    listStreamers(true),
+    listMembers(),
+    listAccounts(accountPage)
+      .then((accounts) => ({ accounts, accountError: '' }))
+      .catch((error) => ({
+        accounts: { page: accountPage, hasNext: false, users: [] },
+        accountError: getErrorMessage(error)
+      }))
+  ]);
   return {
     streamers: streamers.map((s) => ({
       ...s,
       href: streamerUrl(s.slug, url, env.PUBLIC_ROOT_DOMAIN || 'xs0929.cn', '/admin')
     })),
-    members
+    members,
+    ...accountResult
   };
 };
 
@@ -38,6 +51,14 @@ const attempt = async (run: () => Promise<void>, message: string, section = 'gen
   }
 };
 export const actions: Actions = {
+  deleteAccount: async ({ request }) => {
+    const form = await request.formData();
+    return attempt(
+      () => deleteAccount(uuid.parse(form.get('userId'))),
+      '登录账号已从 Supabase Auth 永久删除，无法再登录。',
+      'accounts'
+    );
+  },
   delete: async ({ request }) => {
     requirePlatformAdmin();
     const form = await request.formData();

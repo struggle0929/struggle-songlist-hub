@@ -9,8 +9,16 @@
 <svelte:head><title>主播与账号管理 | {data.siteTitle}</title></svelte:head>
 <div class="space-y-6">
   <h1 class="text-3xl font-semibold">主播与账号管理</h1>
-  {#if form?.message && form.section !== 'assign'}<p class="alert alert-success" role="status">{form.message}</p>{/if}
-  {#if form?.error && form.section !== 'assign' && form.section !== 'delete'}<p class="alert alert-danger" role="alert">
+  {#if form?.message && form.section !== 'assign' && form.section !== 'accounts'}<p
+      class="alert alert-success"
+      role="status"
+    >
+      {form.message}
+    </p>{/if}
+  {#if form?.error && form.section !== 'assign' && form.section !== 'delete' && form.section !== 'accounts'}<p
+      class="alert alert-danger"
+      role="alert"
+    >
       {form.error}
     </p>{/if}
   <section class="request-card p-6">
@@ -176,4 +184,58 @@
       {:else}<p class="text-sm text-[var(--color-text-muted)]">尚未分配账号。</p>{/each}
     </section>
   {/each}
+  <section class="request-card space-y-4 p-6" id="accounts">
+    <h2 class="text-xl font-semibold">登录账号管理</h2>
+    <p class="text-sm text-[var(--color-text-secondary)]">
+      撤销授权或删除歌单会保留登录账号。确认不再使用后，可在此永久删除无任何歌单授权的账号。平台管理员不能删除；停用歌单的授权也需先撤销。
+    </p>
+    {#if data.accountError}<p class="alert alert-danger" role="alert">{data.accountError}</p>{/if}
+    {#if form?.section === 'accounts' && form.error}<p class="alert alert-danger" role="alert">{form.error}</p>{/if}
+    {#if form?.section === 'accounts' && form.message}<p class="alert alert-success" role="status">
+        {form.message}
+      </p>{/if}
+    {#each data.accounts.users as account (account.id)}
+      {@const grants = data.members.filter((member) => member.user_id === account.id).length}
+      <div
+        class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-4"
+        data-account-id={account.id}
+      >
+        <div class="min-w-0 text-sm break-all">
+          <p>{account.email || '无邮箱账号'}</p>
+          <p class="text-[var(--color-text-muted)]">{account.id}</p>
+          <p>
+            {account.isPlatformAdmin
+              ? '平台管理员（受保护）'
+              : grants
+                ? `管理 ${grants} 个歌单，需先撤销全部授权`
+                : '无歌单授权，可删除'}
+          </p>
+        </div>
+        {#if !account.isPlatformAdmin && grants === 0}
+          <form
+            method="POST"
+            action="?/deleteAccount"
+            use:enhance={({ cancel }) => {
+              if (
+                !window.confirm(
+                  `是否确认永久删除登录账号？\n邮箱：${account.email || '无邮箱'}\n账号 ID：${account.id}\n账号将从 Supabase Auth 删除，无法再登录。此操作无法撤销。`
+                )
+              )
+                cancel();
+            }}
+          >
+            <input type="hidden" name="userId" value={account.id} />
+            <button type="submit" class="button button-danger">删除登录账号</button>
+          </form>
+        {/if}
+      </div>
+    {/each}
+    <nav class="flex flex-wrap items-center gap-3" aria-label="账号列表分页">
+      {#if data.accounts.page > 1}<a class="button" href={`?accountPage=${data.accounts.page - 1}#accounts`}>上一页</a
+        >{/if}
+      <span class="text-sm">第 {data.accounts.page} 页 · 每页最多 25 个账号</span>
+      {#if data.accounts.hasNext}<a class="button" href={`?accountPage=${data.accounts.page + 1}#accounts`}>下一页</a
+        >{/if}
+    </nav>
+  </section>
 </div>

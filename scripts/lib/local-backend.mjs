@@ -135,13 +135,24 @@ export async function startLocalBackend(port = 0) {
       if (url.pathname.startsWith('/auth/v1/admin/users')) {
         if (!privileged) return reply({ msg: 'Forbidden' }, 403);
         const id = url.pathname.split('/')[5];
+        if (req.method === 'GET' && !id) {
+          const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+          const perPage = Math.max(1, Number(url.searchParams.get('per_page')) || 25);
+          const all = [...users.values()];
+          return reply({
+            users: all.slice((page - 1) * perPage, page * perPage).map(publicUser),
+            aud: 'authenticated',
+            total: all.length
+          });
+        }
         if (req.method === 'POST') {
           if ([...users.values()].some((u) => u.email === body.email)) return reply({ msg: 'Already exists' }, 422);
           return reply(publicUser(await addUser(randomUUID(), body.email, body.password)));
         }
         if (req.method === 'DELETE') {
-          users.delete(id);
           await db.query('delete from auth.users where id=$1', [id]);
+          users.delete(id);
+          for (const [access, userId] of tokens) if (userId === id) tokens.delete(access);
           return reply({});
         }
         return users.has(id) ? reply(publicUser(users.get(id))) : reply({ msg: 'Not found' }, 404);

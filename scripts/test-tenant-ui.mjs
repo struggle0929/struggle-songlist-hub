@@ -290,6 +290,56 @@ try {
         before
       );
     });
+    await test('only unassigned accounts can be permanently deleted after confirmation; deletion prevents login', async () => {
+      await admin.reload({ waitUntil: 'networkidle' });
+      const accounts = admin.locator('#accounts');
+      assert.equal(
+        await accounts
+          .locator(`[data-account-id="${backend.ids.admin}"]`)
+          .getByRole('button', { name: '删除登录账号' })
+          .count(),
+        0
+      );
+      assert.equal(
+        await accounts
+          .locator(`[data-account-id="${backend.ids.aUser}"]`)
+          .getByRole('button', { name: '删除登录账号' })
+          .count(),
+        0
+      );
+      for (const userId of [backend.ids.admin, backend.ids.aUser]) {
+        const result = await admin.request.post(origin + '/admin/streamers?/deleteAccount', {
+          form: { userId },
+          headers: { Origin: origin, Accept: 'text/html' }
+        });
+        assert.equal(result.status(), 400);
+        assert.ok(backend.users.has(userId));
+      }
+      const user = [...backend.users.values()].find((u) => u.email === '111@local.test');
+      assert.ok(user);
+      const row = accounts.locator(`[data-account-id="${user.id}"]`);
+      admin.once('dialog', async (dialog) => {
+        assert.ok(dialog.message().includes('无法撤销'));
+        await dialog.dismiss();
+      });
+      await row.getByRole('button', { name: '删除登录账号', exact: true }).click();
+      await admin.reload({ waitUntil: 'networkidle' });
+      await row.waitFor();
+      assert.ok(backend.users.has(user.id));
+      admin.once('dialog', async (dialog) => {
+        await dialog.accept();
+      });
+      await row.getByRole('button', { name: '删除登录账号', exact: true }).click();
+      await row.waitFor({ state: 'detached' });
+      await accounts.getByRole('status').filter({ hasText: '永久删除' }).waitFor();
+      assert.equal(backend.users.has(user.id), false);
+      assert.equal((await backend.db.query('select * from auth.users where id=$1', [user.id])).rows.length, 0);
+      const login = await admin.request.post(backend.url + '/auth/v1/token?grant_type=password', {
+        data: { email: user.email, password: backend.password }
+      });
+      assert.equal(login.status(), 400);
+      assert.ok(backend.users.has(backend.ids.aUser));
+    });
     assert.ok(await admin.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await admin.screenshot({ path: join(tmpdir(), 'songlist-hub-platform-mobile.png'), fullPage: true });
     await platform.close();
