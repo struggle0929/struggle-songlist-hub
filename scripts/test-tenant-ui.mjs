@@ -149,6 +149,29 @@ try {
       .locator('section')
       .filter({ has: admin.getByRole('heading', { name: '浏览器新主播 · browser-host' }) });
     const streamer = (await backend.db.query("select id from streamers where slug='browser-host'")).rows[0];
+    await test('saving enabled state or nickname preserves form values and survives repeated saves and reloads', async () => {
+      const edit = admin.locator(`form[action="?/edit"]:has(input[name="id"][value="${streamer.id}"])`);
+      for (const [name, enabled] of [
+        ['浏览器新主播', false],
+        ['浏览器新主播', true],
+        ['修改后的昵称', true],
+        ['浏览器新主播', true]
+      ]) {
+        await edit.locator('[name=name]').fill(name);
+        await edit.locator('[name=enabled]').setChecked(enabled);
+        const response = admin.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('?/edit'));
+        await edit.getByRole('button', { name: '保存', exact: true }).click();
+        await response;
+        await admin.waitForLoadState('networkidle');
+        assert.equal(await edit.locator('[name=name]').inputValue(), name);
+        assert.equal(await edit.locator('[name=enabled]').isChecked(), enabled);
+        const saved = (await backend.db.query('select name,enabled from streamers where id=$1', [streamer.id])).rows[0];
+        assert.deepEqual(saved, { name, enabled });
+      }
+      await admin.reload({ waitUntil: 'networkidle' });
+      assert.equal(await edit.locator('[name=name]').inputValue(), '浏览器新主播');
+      assert.equal(await edit.locator('[name=enabled]').isChecked(), true);
+    });
     await test('invalid existing account ID shows an inline explanation and preserves the selected streamer', async () => {
       await assign.locator('[name=mode]').selectOption('existing');
       await assign.locator('[name=streamerId]').selectOption(streamer.id);

@@ -131,7 +131,15 @@
       {#if form?.section === 'delete' && 'targetId' in form && form.targetId === s.id && form.error}
         <p class="alert alert-danger" role="alert">{form.error}</p>
       {/if}
-      <form method="POST" action="?/edit" use:enhance class="flex flex-wrap items-center gap-3">
+      <form
+        method="POST"
+        action="?/edit"
+        use:enhance={() =>
+          async ({ update }) => {
+            await update({ reset: false });
+          }}
+        class="flex flex-wrap items-center gap-3"
+      >
         <input type="hidden" name="id" value={s.id} />
         <label class="field-label"
           >昵称<input class="form-field" name="name" value={s.name} required maxlength="80" /></label
