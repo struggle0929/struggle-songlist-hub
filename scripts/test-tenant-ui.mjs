@@ -246,6 +246,27 @@ try {
       });
       assert.equal(login.status(), 200);
     });
+    await test('an already running legacy local fixture can delete one songlist without restarting or clearing others', async () => {
+      const oldId = '77777777-7777-4777-8777-777777777777';
+      await backend.db.query('select create_streamer($1,$2,$3)', [oldId, 'legacy-local', '旧本地实验']);
+      await backend.db.exec('drop function public.delete_streamer(uuid)');
+      const before = (await backend.db.query('select * from songs where streamer_id=$1 order by id', [backend.ids.b]))
+        .rows;
+      await admin.reload({ waitUntil: 'networkidle' });
+      const oldCard = admin
+        .locator('section')
+        .filter({ has: admin.getByRole('heading', { name: '旧本地实验 · legacy-local' }) });
+      admin.once('dialog', async (dialog) => {
+        await dialog.accept();
+      });
+      await oldCard.getByRole('button', { name: '删除歌单', exact: true }).click();
+      await oldCard.waitFor({ state: 'detached' });
+      assert.equal((await backend.db.query('select * from streamers where id=$1', [oldId])).rows.length, 0);
+      assert.deepEqual(
+        (await backend.db.query('select * from songs where streamer_id=$1 order by id', [backend.ids.b])).rows,
+        before
+      );
+    });
     assert.ok(await admin.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await admin.screenshot({ path: join(tmpdir(), 'songlist-hub-platform-mobile.png'), fullPage: true });
     await platform.close();

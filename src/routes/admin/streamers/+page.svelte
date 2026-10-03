@@ -10,7 +10,9 @@
 <div class="space-y-6">
   <h1 class="text-3xl font-semibold">主播与账号管理</h1>
   {#if form?.message && form.section !== 'assign'}<p class="alert alert-success" role="status">{form.message}</p>{/if}
-  {#if form?.error && form.section !== 'assign'}<p class="alert alert-danger" role="alert">{form.error}</p>{/if}
+  {#if form?.error && form.section !== 'assign' && form.section !== 'delete'}<p class="alert alert-danger" role="alert">
+      {form.error}
+    </p>{/if}
   <section class="request-card p-6">
     <h2 class="text-xl font-semibold">创建歌单</h2>
     <form method="POST" action="?/create" use:enhance class="mt-4 grid gap-4 sm:grid-cols-2">
@@ -115,7 +117,7 @@
             use:enhance={({ cancel }) => {
               if (
                 !window.confirm(
-                  `是否确认删除歌单“${s.name}（${s.slug}）”？\n此操作将永久删除该歌单的歌曲、愿望、页面配置和授权，无法撤销，请先备份。关联账号不会删除。`
+                  `是否确认删除歌单“${s.name}（${s.slug}）”？\n此操作将永久删除该歌单的歌曲、愿望、页面配置和授权，无法撤销，请先备份。\n登录账号仍保留，但会失去此歌单的管理权限；其他歌单权限不受影响。`
                 )
               )
                 cancel();
@@ -126,6 +128,9 @@
           </form>
         </div>
       </div>
+      {#if form?.section === 'delete' && 'targetId' in form && form.targetId === s.id && form.error}
+        <p class="alert alert-danger" role="alert">{form.error}</p>
+      {/if}
       <form method="POST" action="?/edit" use:enhance class="flex flex-wrap items-center gap-3">
         <input type="hidden" name="id" value={s.id} />
         <label class="field-label"

@@ -41,12 +41,14 @@ export const actions: Actions = {
   delete: async ({ request }) => {
     requirePlatformAdmin();
     const form = await request.formData();
+    const targetId = String(form.get('id') || '');
     try {
-      return { message: await deleteStreamer(uuid.parse(form.get('id'))), section: 'general' };
+      return { message: await deleteStreamer(uuid.parse(targetId)), section: 'delete', targetId };
     } catch (e) {
       return fail(400, {
         error: e instanceof z.ZodError ? e.issues[0].message : getErrorMessage(e),
-        section: 'general'
+        section: 'delete',
+        targetId
       });
     }
   },

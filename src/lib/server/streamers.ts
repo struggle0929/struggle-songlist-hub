@@ -4,6 +4,8 @@ import { getDemoCatalog, localDemo } from '$lib/server/demo';
 import { currentContext, requirePlatformAdmin, ownedStreamerAsset } from '$lib/server/tenant';
 import { appearancePaths, parseAppearance } from '$lib/appearance';
 import { settingsAssetBucket } from '$lib/server/settings';
+import { env as privateEnv } from '$env/dynamic/private';
+import { env as publicEnv } from '$env/dynamic/public';
 import { validSlug, type Streamer } from '$lib/streamers';
 import { UserFacingError } from '$lib/server/errors';
 
@@ -107,11 +109,31 @@ export async function listMembers() {
 }
 export async function deleteStreamer(id: string) {
   requirePlatformAdmin();
-  const { data, error } = await supabaseAdmin.rpc('delete_streamer', { p_streamer_id: id });
-  if (error?.code === '42883' || error?.code === 'PGRST202')
-    throw new UserFacingError(
-      '删除功能的数据库升级尚未加载。本地内存实验请先导出需要保留的备份，再重启 npm run dev:local；真实数据库请执行 20261003_delete_streamer.sql。'
-    );
+  let { data, error } = await supabaseAdmin.rpc('delete_streamer', { p_streamer_id: id });
+  if (error?.code === '42883' || error?.code === 'PGRST202') {
+    // Only an already running pre-migration dev:local fixture uses sequential cleanup.
+    // Real projects always require the atomic RPC.
+    const isLocalFixture =
+      import.meta.env.DEV &&
+      privateEnv.SUPABASE_SECRET_KEY === 'local-service-only-key' &&
+      publicEnv.PUBLIC_SUPABASE_PUBLISHABLE_KEY === 'local-publishable-key' &&
+      /^http:\/\/127\.0\.0\.1:\d+$/.test(publicEnv.PUBLIC_SUPABASE_URL || '');
+    if (!isLocalFixture)
+      throw new UserFacingError('删除功能的数据库升级尚未加载，请执行 20261003_delete_streamer.sql。');
+    const { data: rows, error: readError } = await supabaseAdmin
+      .from('settings')
+      .select('key,value')
+      .eq('streamer_id', id);
+    if (readError) throw readError;
+    data = Object.fromEntries((rows ?? []).map((row) => [row.key, row.value]));
+    for (const table of ['requests', 'songs', 'settings', 'streamer_members'] as const) {
+      const { error: removeError } = await supabaseAdmin.from(table).delete().eq('streamer_id', id);
+      if (removeError) throw removeError;
+    }
+    const { error: removeError } = await supabaseAdmin.from('streamers').delete().eq('id', id);
+    if (removeError) throw removeError;
+    error = null;
+  }
   if (error) throw error;
   const settings = data as Record<string, string>;
   const paths = [
@@ -128,7 +150,7 @@ export async function deleteStreamer(id: string) {
       return '歌单及授权已删除，但素材清理失败，请检查对象存储。账号仍保留。';
     }
   }
-  return '歌单、歌曲、愿望、配置及授权已删除，关联账号仍保留。';
+  return '歌单、歌曲、愿望、配置及授权已删除。登录账号仍保留，但已失去此歌单的管理权限；其他歌单权限不受影响。';
 }
 export async function assignAccount(streamerId: string, input: { userId?: string; email?: string; password?: string }) {
   requirePlatformAdmin();
