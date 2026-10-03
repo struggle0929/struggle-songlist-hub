@@ -151,6 +151,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      delete_streamer: { Args: { p_streamer_id: string }; Returns: Json };
       create_streamer: { Args: { p_id: string; p_slug: string; p_name: string }; Returns: undefined };
       accept_song_request: { Args: { request_id: string; p_streamer_id: string }; Returns: string };
       consume_request_rate_limit: {

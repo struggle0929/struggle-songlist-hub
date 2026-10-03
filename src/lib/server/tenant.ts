@@ -31,7 +31,9 @@ export function tenantAssetPath(relative: string) {
   return `${tenantId(true)}/${relative}`;
 }
 export function ownedAsset(path: string) {
-  const id = tenantId();
+  return ownedStreamerAsset(path, tenantId());
+}
+export function ownedStreamerAsset(path: string, id: string) {
   const prefix =
     path.startsWith(id + '/') ||
     (id === '00000000-0000-4000-8000-000000000001' && /^(profile|appearance|restores)\//.test(path));

@@ -188,6 +188,64 @@ try {
         await newContext.close();
       }
     });
+    await test('revocation confirmation can cancel safely or confirm and refresh membership', async () => {
+      await card.getByText('111@local.test', { exact: true }).waitFor();
+      admin.once('dialog', async (dialog) => {
+        assert.ok(dialog.message().includes('是否确认撤销授权'));
+        await dialog.dismiss();
+      });
+      await card.getByRole('button', { name: '撤销授权', exact: true }).click();
+      await admin.reload({ waitUntil: 'networkidle' });
+      await card.getByText('111@local.test', { exact: true }).waitFor();
+      admin.once('dialog', async (dialog) => {
+        await dialog.accept();
+      });
+      await card.getByRole('button', { name: '撤销授权', exact: true }).click();
+      await card.getByText('尚未分配账号。', { exact: true }).waitFor();
+      assert.equal(
+        (await backend.db.query('select * from streamer_members where streamer_id=$1', [streamer.id])).rows.length,
+        0
+      );
+    });
+    await test('deletion confirmation can cancel or remove a disabled streamer without deleting its account or another songlist', async () => {
+      const ownAsset = streamer.id + '/profile/delete.png';
+      const otherAsset = backend.ids.b + '/profile/keep.png';
+      backend.files.set(ownAsset, { bytes: Buffer.from('delete'), type: 'image/png' });
+      backend.files.set(otherAsset, { bytes: Buffer.from('keep'), type: 'image/png' });
+      await backend.db.query("update settings set value=$2 where streamer_id=$1 and key='background_path'", [
+        streamer.id,
+        ownAsset
+      ]);
+      await backend.db.query('update streamers set enabled=false where id=$1', [streamer.id]);
+      await admin.reload({ waitUntil: 'networkidle' });
+      const bSongs = (await backend.db.query('select * from songs where streamer_id=$1 order by id', [backend.ids.b]))
+        .rows;
+      admin.once('dialog', async (dialog) => {
+        assert.ok(dialog.message().includes('是否确认删除歌单'));
+        assert.ok(dialog.message().includes('无法撤销'));
+        await dialog.dismiss();
+      });
+      await card.getByRole('button', { name: '删除歌单', exact: true }).click();
+      await admin.reload({ waitUntil: 'networkidle' });
+      await card.waitFor();
+      assert.ok(backend.files.has(ownAsset));
+      admin.once('dialog', async (dialog) => {
+        await dialog.accept();
+      });
+      await card.getByRole('button', { name: '删除歌单', exact: true }).click();
+      await card.waitFor({ state: 'detached' });
+      assert.equal((await backend.db.query('select * from streamers where id=$1', [streamer.id])).rows.length, 0);
+      assert.equal(backend.files.has(ownAsset), false);
+      assert.ok(backend.files.has(otherAsset));
+      assert.deepEqual(
+        (await backend.db.query('select * from songs where streamer_id=$1 order by id', [backend.ids.b])).rows,
+        bSongs
+      );
+      const login = await admin.request.post(backend.url + '/auth/v1/token?grant_type=password', {
+        data: { email: '111@local.test', password: backend.password }
+      });
+      assert.equal(login.status(), 200);
+    });
     assert.ok(await admin.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await admin.screenshot({ path: join(tmpdir(), 'songlist-hub-platform-mobile.png'), fullPage: true });
     await platform.close();

@@ -107,7 +107,24 @@
     <section class="request-card space-y-4 p-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-xl font-semibold">{s.name} · {s.slug}</h2>
-        {#if s.enabled}<a class="button" href={s.href}>进入后台</a>{/if}
+        <div class="flex flex-wrap items-center gap-3">
+          {#if s.enabled}<a class="button" href={s.href}>进入后台</a>{/if}
+          <form
+            method="POST"
+            action="?/delete"
+            use:enhance={({ cancel }) => {
+              if (
+                !window.confirm(
+                  `是否确认删除歌单“${s.name}（${s.slug}）”？\n此操作将永久删除该歌单的歌曲、愿望、页面配置和授权，无法撤销，请先备份。关联账号不会删除。`
+                )
+              )
+                cancel();
+            }}
+          >
+            <input type="hidden" name="id" value={s.id} />
+            <button type="submit" class="button button-danger">删除歌单</button>
+          </form>
+        </div>
       </div>
       <form method="POST" action="?/edit" use:enhance class="flex flex-wrap items-center gap-3">
         <input type="hidden" name="id" value={s.id} />
@@ -119,15 +136,29 @@
       </form>
       <h3 class="font-semibold">已授权账号</h3>
       {#each data.members.filter((m) => m.streamer_id === s.id) as member (member.user_id)}
-        <form method="POST" action="?/revoke" use:enhance class="flex flex-wrap items-center gap-3">
+        <form
+          method="POST"
+          action="?/revoke"
+          use:enhance={({ cancel }) => {
+            if (
+              !window.confirm(
+                `是否确认撤销授权？\n歌单：${s.name}（${s.slug}）\n账号：${member.email || member.user_id}\n撤销后该账号将无法管理此歌单。`
+              )
+            )
+              cancel();
+          }}
+          class="flex flex-wrap items-center gap-3"
+        >
           <input type="hidden" name="streamerId" value={s.id} /><input
             type="hidden"
             name="userId"
             value={member.user_id}
           />
-          <span class="text-sm break-all">{member.user_id}</span><button type="submit" class="button button-danger"
-            >撤销授权</button
-          >
+          <span class="text-sm break-all"
+            >{#if member.email}<span class="block">{member.email}</span>{/if}<span
+              class="text-[var(--color-text-muted)]">{member.user_id}</span
+            ></span
+          ><button type="submit" class="button button-danger">撤销授权</button>
         </form>
       {:else}<p class="text-sm text-[var(--color-text-muted)]">尚未分配账号。</p>{/each}
     </section>

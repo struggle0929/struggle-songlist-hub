@@ -97,6 +97,7 @@ v0.2.0 已按用户要求实现多主播共用数据库与部署，本文件记�
 - `src/routes/admin/streamers/+page.server.ts`
 - `src/routes/admin/streamers/+page.svelte`
 - `supabase/migrations/20261003_multi_streamer.sql`
+- `supabase/migrations/20261003_delete_streamer.sql`
 - `supabase/schema.sql`
 - `supabase/single-streamer-baseline.sql`
 - `vite.config.ts`

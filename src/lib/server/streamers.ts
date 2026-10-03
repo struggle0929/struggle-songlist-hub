@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { supabaseAdmin, supabasePublic } from '$lib/server/supabase';
 import { getDemoCatalog, localDemo } from '$lib/server/demo';
-import { currentContext, requirePlatformAdmin } from '$lib/server/tenant';
+import { currentContext, requirePlatformAdmin, ownedStreamerAsset } from '$lib/server/tenant';
+import { appearancePaths, parseAppearance } from '$lib/appearance';
+import { settingsAssetBucket } from '$lib/server/settings';
 import { validSlug, type Streamer } from '$lib/streamers';
 import { UserFacingError } from '$lib/server/errors';
 
@@ -96,7 +98,37 @@ export async function listMembers() {
   requirePlatformAdmin();
   const { data, error } = await supabaseAdmin.from('streamer_members').select('*').order('created_at');
   if (error) throw error;
-  return data ?? [];
+  return Promise.all(
+    (data ?? []).map(async (member) => {
+      const { data: account } = await supabaseAdmin.auth.admin.getUserById(member.user_id);
+      return { ...member, email: account.user?.email ?? null };
+    })
+  );
+}
+export async function deleteStreamer(id: string) {
+  requirePlatformAdmin();
+  const { data, error } = await supabaseAdmin.rpc('delete_streamer', { p_streamer_id: id });
+  if (error?.code === '42883' || error?.code === 'PGRST202')
+    throw new UserFacingError(
+      '删除功能的数据库升级尚未加载。本地内存实验请先导出需要保留的备份，再重启 npm run dev:local；真实数据库请执行 20261003_delete_streamer.sql。'
+    );
+  if (error) throw error;
+  const settings = data as Record<string, string>;
+  const paths = [
+    ...new Set(
+      [settings.avatar_path, settings.background_path, ...appearancePaths(parseAppearance(settings.appearance))].filter(
+        (path) => Boolean(path) && ownedStreamerAsset(path, id)
+      )
+    )
+  ];
+  if (paths.length) {
+    const { error: cleanupError } = await supabaseAdmin.storage.from(settingsAssetBucket).remove(paths);
+    if (cleanupError) {
+      console.error('歌单已删除，但素材清理失败', id, cleanupError);
+      return '歌单及授权已删除，但素材清理失败，请检查对象存储。账号仍保留。';
+    }
+  }
+  return '歌单、歌曲、愿望、配置及授权已删除，关联账号仍保留。';
 }
 export async function assignAccount(streamerId: string, input: { userId?: string; email?: string; password?: string }) {
   requirePlatformAdmin();

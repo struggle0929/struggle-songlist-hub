@@ -40,6 +40,7 @@ try {
     'alter table storage.objects enable row level security;grant all on storage.objects to anon,authenticated;grant usage on schema storage to anon,authenticated;create policy legacy_permissive on storage.objects for all to anon,authenticated using(true) with check(true);'
   );
   await db.exec(await readFile('supabase/migrations/20261003_multi_streamer.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261003_delete_streamer.sql', 'utf8'));
   await test('legacy upgrade preserves songs, request links and existing Storage keys', async () => {
     assert.equal((await db.query('select streamer_id from songs')).rows[0].streamer_id, A);
     assert.equal((await db.query('select matched_song_id from requests')).rows[0].matched_song_id, songId);
@@ -152,6 +153,7 @@ try {
     for (const role of ['anon', 'authenticated']) {
       await db.exec(`set role ${role};`);
       await assert.rejects(db.query('select reset_admin_data($1,$2)', [A, '{}']));
+      await assert.rejects(db.query('select delete_streamer($1)', [A]));
       await assert.rejects(db.query('select * from platform_admins'));
       await assert.rejects(db.query('select * from streamer_members'));
       await assert.rejects(db.query('select * from requests'));
@@ -172,6 +174,24 @@ try {
       (await db.query("select to_regprocedure('public.restore_admin_data(jsonb,jsonb,jsonb)') f")).rows[0].f,
       null
     );
+  });
+  await test('deleting a disabled streamer atomically removes only its records and preserves shared accounts', async () => {
+    const beforeA = (await db.query('select * from settings where streamer_id=$1 order by key', [A])).rows;
+    await db.query('insert into auth.users(id) values($1)', [requestId]);
+    await db.query('insert into streamer_members(streamer_id,user_id) values($1,$2),($3,$2)', [A, requestId, B]);
+    const deleted = (await db.query('select delete_streamer($1) settings', [B])).rows[0].settings;
+    assert.equal(typeof deleted, 'object');
+    for (const table of ['songs', 'requests', 'settings', 'streamer_members'])
+      assert.equal((await db.query(`select * from ${table} where streamer_id=$1`, [B])).rows.length, 0);
+    assert.equal((await db.query('select * from streamers where id=$1', [B])).rows.length, 0);
+    assert.equal((await db.query('select * from auth.users where id=$1', [requestId])).rows.length, 1);
+    assert.equal(
+      (await db.query('select * from streamer_members where streamer_id=$1 and user_id=$2', [A, requestId])).rows
+        .length,
+      1
+    );
+    assert.deepEqual((await db.query('select * from settings where streamer_id=$1 order by key', [A])).rows, beforeA);
+    await assert.rejects(db.query('select delete_streamer($1)', [B]));
   });
   await test('full empty-database schema initializes the same tenant structure', async () => {
     const fresh = new PGlite();

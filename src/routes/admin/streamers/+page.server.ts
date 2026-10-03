@@ -6,6 +6,7 @@ import {
   editStreamer,
   assignAccount,
   revokeAccount,
+  deleteStreamer,
   listMembers,
   listStreamers
 } from '$lib/server/streamers';
@@ -37,6 +38,18 @@ const attempt = async (run: () => Promise<void>, message: string, section = 'gen
   }
 };
 export const actions: Actions = {
+  delete: async ({ request }) => {
+    requirePlatformAdmin();
+    const form = await request.formData();
+    try {
+      return { message: await deleteStreamer(uuid.parse(form.get('id'))), section: 'general' };
+    } catch (e) {
+      return fail(400, {
+        error: e instanceof z.ZodError ? e.issues[0].message : getErrorMessage(e),
+        section: 'general'
+      });
+    }
+  },
   create: async ({ request }) => {
     const form = await request.formData();
     return attempt(
