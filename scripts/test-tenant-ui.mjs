@@ -144,6 +144,50 @@ try {
     await admin.locator('form[action="?/create"] [name=name]').fill('浏览器新主播');
     await admin.getByRole('button', { name: '创建歌单', exact: true }).click();
     await admin.getByRole('heading', { name: '浏览器新主播 · browser-host' }).waitFor();
+    const assign = admin.locator('form[action="?/assign"]');
+    const card = admin
+      .locator('section')
+      .filter({ has: admin.getByRole('heading', { name: '浏览器新主播 · browser-host' }) });
+    const streamer = (await backend.db.query("select id from streamers where slug='browser-host'")).rows[0];
+    await test('invalid existing account ID shows an inline explanation and preserves the selected streamer', async () => {
+      await assign.locator('[name=mode]').selectOption('existing');
+      await assign.locator('[name=streamerId]').selectOption(streamer.id);
+      await assign.locator('[name=userId]').fill('111');
+      await assign.getByRole('button', { name: '分配管理权限', exact: true }).click();
+      await assign.getByRole('alert').filter({ hasText: '必须是完整的 Supabase 用户 UUID' }).waitFor();
+      assert.equal(await assign.locator('[name=userId]').inputValue(), '111');
+      assert.equal(await assign.locator('[name=streamerId]').inputValue(), streamer.id);
+      assert.equal(
+        (await backend.db.query('select * from streamer_members where streamer_id=$1', [streamer.id])).rows.length,
+        0
+      );
+    });
+    await test('creating an account grants permission, refreshes the member list and allows streamer login', async () => {
+      await assign.locator('[name=mode]').selectOption('create');
+      assert.equal(await assign.locator('[name=userId]').count(), 0);
+      await assign.locator('[name=email]').fill('111@local.test');
+      await assign.locator('[name=password]').fill(backend.password);
+      await assign.getByRole('button', { name: '分配管理权限', exact: true }).click();
+      await assign.getByRole('status').filter({ hasText: '账号已分配' }).waitFor();
+      const member = (
+        await backend.db.query('select user_id from streamer_members where streamer_id=$1', [streamer.id])
+      ).rows[0];
+      assert.ok(member);
+      await card.getByText(member.user_id, { exact: true }).waitFor();
+      await admin.reload({ waitUntil: 'networkidle' });
+      await card.getByText(member.user_id, { exact: true }).waitFor();
+      const newContext = await browser.newContext();
+      try {
+        const login = await newContext.newPage();
+        await login.goto(origin + '/s/browser-host/admin/login', { waitUntil: 'networkidle' });
+        await login.locator('[name=email]').fill('111@local.test');
+        await login.locator('[name=password]').fill(backend.password);
+        await login.getByRole('button', { name: '登录后台', exact: true }).click();
+        await login.getByRole('heading', { name: '管理歌曲与愿望单' }).waitFor();
+      } finally {
+        await newContext.close();
+      }
+    });
     assert.ok(await admin.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await admin.screenshot({ path: join(tmpdir(), 'songlist-hub-platform-mobile.png'), fullPage: true });
     await platform.close();

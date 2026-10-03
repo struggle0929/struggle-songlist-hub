@@ -11,7 +11,7 @@ import {
 } from '$lib/server/streamers';
 import { requirePlatformAdmin } from '$lib/server/tenant';
 import { streamerUrl } from '$lib/streamers';
-import { getErrorMessage } from '$lib/server/errors';
+import { getErrorMessage, UserFacingError } from '$lib/server/errors';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -27,13 +27,13 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 const uuid = z.string().uuid();
-const attempt = async (run: () => Promise<void>, message: string) => {
+const attempt = async (run: () => Promise<void>, message: string, section = 'general') => {
   requirePlatformAdmin();
   try {
     await run();
-    return { message };
+    return { message, section };
   } catch (e) {
-    return fail(400, { error: e instanceof z.ZodError ? e.issues[0].message : getErrorMessage(e) });
+    return fail(400, { error: e instanceof z.ZodError ? e.issues[0].message : getErrorMessage(e), section });
   }
 };
 export const actions: Actions = {
@@ -53,21 +53,34 @@ export const actions: Actions = {
   },
   assign: async ({ request }) => {
     const form = await request.formData();
-    return attempt(async () => {
-      const userId = String(form.get('userId') || '').trim();
-      await assignAccount(
-        uuid.parse(form.get('streamerId')),
-        userId
-          ? { userId: uuid.parse(userId) }
-          : {
-              email: z
-                .string()
-                .email()
-                .parse(String(form.get('email') || '').trim()),
-              password: String(form.get('password') || '')
-            }
-      );
-    }, '账号已分配，可登录对应主播后台。');
+    return attempt(
+      async () => {
+        const userId = String(form.get('userId') || '').trim();
+        const mode = String(form.get('mode') || (userId ? 'existing' : 'create'));
+        if (!['existing', 'create'].includes(mode)) throw new UserFacingError('请选择创建新账号或关联现有账号。');
+        await assignAccount(
+          uuid.parse(form.get('streamerId')),
+          mode === 'existing'
+            ? {
+                userId: z
+                  .string()
+                  .uuid(
+                    '现有账号 ID 必须是完整的 Supabase 用户 UUID，不能填写主播标识或昵称。创建新账号请选择“创建新账号”。'
+                  )
+                  .parse(userId)
+              }
+            : {
+                email: z
+                  .string()
+                  .email('请填写有效的新账号邮箱。')
+                  .parse(String(form.get('email') || '').trim()),
+                password: String(form.get('password') || '')
+              }
+        );
+      },
+      '账号已分配，可登录对应主播后台。',
+      'assign'
+    );
   },
   revoke: async ({ request }) => {
     const form = await request.formData();

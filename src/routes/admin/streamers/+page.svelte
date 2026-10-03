@@ -2,13 +2,15 @@
   import { enhance } from '$app/forms';
   import type { PageData, ActionData } from './$types';
   let { data, form }: { data: PageData; form?: ActionData } = $props();
+  let accountMode = $state('create');
+  let assigning = $state(false);
 </script>
 
 <svelte:head><title>主播与账号管理 | {data.siteTitle}</title></svelte:head>
 <div class="space-y-6">
   <h1 class="text-3xl font-semibold">主播与账号管理</h1>
-  {#if form?.message}<p class="alert alert-success" role="status">{form.message}</p>{/if}
-  {#if form?.error}<p class="alert alert-danger" role="alert">{form.error}</p>{/if}
+  {#if form?.message && form.section !== 'assign'}<p class="alert alert-success" role="status">{form.message}</p>{/if}
+  {#if form?.error && form.section !== 'assign'}<p class="alert alert-danger" role="alert">{form.error}</p>{/if}
   <section class="request-card p-6">
     <h2 class="text-xl font-semibold">创建歌单</h2>
     <form method="POST" action="?/create" use:enhance class="mt-4 grid gap-4 sm:grid-cols-2">
@@ -33,36 +35,72 @@
   </section>
   <section class="request-card p-6">
     <h2 class="text-xl font-semibold">分配账号</h2>
-    <form method="POST" action="?/assign" use:enhance class="mt-4 grid gap-4 sm:grid-cols-2">
+    <form
+      method="POST"
+      action="?/assign"
+      use:enhance={() => {
+        assigning = true;
+        return async ({ update }) => {
+          try {
+            await update({ reset: false });
+          } finally {
+            assigning = false;
+          }
+        };
+      }}
+      class="mt-4 grid gap-4 sm:grid-cols-2"
+    >
+      <label class="field-label sm:col-span-2"
+        >账号方式<select name="mode" class="form-field" bind:value={accountMode}>
+          <option value="create">创建新账号</option>
+          <option value="existing">关联现有账号</option>
+        </select></label
+      >
       <label class="field-label"
         >歌单<select name="streamerId" class="form-field" required
           ><option value="">请选择</option>{#each data.streamers as s}<option value={s.id}>{s.name}（{s.slug}）</option
             >{/each}</select
         ></label
       >
-      <label class="field-label"
-        >现有账号 ID<input
-          class="form-field"
-          name="userId"
-          placeholder="填写 Supabase 用户 UUID，或留空创建账号"
-        /></label
+      {#if accountMode === 'existing'}
+        <label class="field-label"
+          >现有账号 ID<input
+            class="form-field"
+            name="userId"
+            required
+            placeholder="例如 bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          /></label
+        >
+        <p class="text-sm text-[var(--color-text-secondary)] sm:col-span-2">
+          填写 Supabase Authentication 中该用户的完整 UUID，不是主播标识、昵称或邮箱。
+        </p>
+      {:else}
+        <label class="field-label"
+          >新账号邮箱<input class="form-field" name="email" type="email" required autocomplete="off" /></label
+        >
+        <label class="field-label"
+          >新账号密码<input
+            class="form-field"
+            name="password"
+            type="password"
+            minlength="12"
+            required
+            autocomplete="new-password"
+          /></label
+        >
+        <p class="text-sm text-[var(--color-text-secondary)] sm:col-span-2">
+          新账号密码至少 12 位，不会自动发送邮件；请自行将登录信息交给主播。
+        </p>
+      {/if}
+      {#if form?.section === 'assign' && form.error}<p class="alert alert-danger sm:col-span-2" role="alert">
+          {form.error}
+        </p>{/if}
+      {#if form?.section === 'assign' && form.message}<p class="alert alert-success sm:col-span-2" role="status">
+          {form.message}
+        </p>{/if}
+      <button type="submit" class="button button-primary" disabled={assigning}
+        >{assigning ? '正在分配…' : '分配管理权限'}</button
       >
-      <label class="field-label"
-        >新账号邮箱<input class="form-field" name="email" type="email" autocomplete="off" /></label
-      >
-      <label class="field-label"
-        >新账号密码<input
-          class="form-field"
-          name="password"
-          type="password"
-          minlength="12"
-          autocomplete="new-password"
-        /></label
-      >
-      <p class="text-sm text-[var(--color-text-secondary)] sm:col-span-2">
-        关联现有账号时无需邮箱和密码。新账号密码至少 12 位，不会自动发送邮件；请自行将登录信息交给主播。
-      </p>
-      <button type="submit" class="button button-primary">分配管理权限</button>
     </form>
   </section>
   {#each data.streamers as s (s.id)}
