@@ -174,6 +174,28 @@ try {
       assert.equal(playlistImportFormValuesSchema.parse(form).importPreview.provider, 'netease');
     }
   });
+  await test('updated NetEase API preserves single-song and playlist imports with bounded network timeout', async () => {
+    const api = (await import('@neteasecloudmusicapienhanced/api')).default;
+    const originalSong = api.song_detail;
+    const originalPlaylist = api.playlist_detail;
+    try {
+      api.song_detail = async (params) => {
+        assert.equal(params.timeout, 30_000);
+        return { body: { code: 200, songs: [{ name: '测试歌曲', ar: [{ name: '测试原唱' }] }] } };
+      };
+      api.playlist_detail = async (params) => {
+        assert.equal(params.timeout, 30_000);
+        return { body: { code: 200, playlist: { trackIds: [{ id: 123 }] } } };
+      };
+      assert.deepEqual(await fetchMusicTracks('netease', '123', 'song'), [{ title: '测试歌曲', artist: '测试原唱' }]);
+      assert.deepEqual(await fetchMusicTracks('netease', '123', 'playlist'), [
+        { title: '测试歌曲', artist: '测试原唱' }
+      ]);
+    } finally {
+      api.song_detail = originalSong;
+      api.playlist_detail = originalPlaylist;
+    }
+  });
   console.log(passed + ' music import tests passed. No real database used.');
   if (process.argv.includes('--live')) {
     globalThis.fetch = originalFetch;

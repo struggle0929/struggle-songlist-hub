@@ -247,6 +247,42 @@ try {
       0
     );
   });
+  await test('security headers do not expose or cache private HTML', async () => {
+    const response = await request('/s/xunxuntu/');
+    assert.equal(response.headers.get('x-frame-options'), 'DENY');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.ok(response.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
+  });
+  await test('login limit shares counters across streamer paths and normalized email addresses', async () => {
+    for (let i = 0; i < 10; i++) {
+      const response = await form(i % 2 ? '/admin/login' : '/s/xunxuntu/admin/login', {
+        email: i % 2 ? 'Rate-limit@local.test' : 'rate-limit@local.test',
+        password: 'Wrong-password-123!'
+      });
+      assert.equal(response.status, 400);
+    }
+    const blocked = await form('/s/siro0/admin/login', {
+      email: 'rate-limit@local.test',
+      password: 'Wrong-password-123!'
+    });
+    assert.equal(blocked.status, 429);
+    assert.equal(blocked.headers.get('retry-after'), '600');
+    assert.equal(cookieOf(blocked), '');
+    assert.equal((await request('/s/xunxuntu/admin', bCookie)).status, 200);
+    const rows = (await backend.db.query("select client_key from request_rate_limits where client_key like 'login:%'"))
+      .rows;
+    assert.ok(rows.length > 0);
+    assert.ok(rows.every((r) => !r.client_key.includes('@') && !r.client_key.includes('127.0.0.1')));
+  });
+  await test('public read protection returns 429 before catalog queries and preserves admin access', async () => {
+    const { consumePublicRead } = await app.ssrLoadModule('/src/lib/server/security.ts');
+    for (let i = 0; i < 240; i++) consumePublicRead('127.0.0.1');
+    const response = await request('/s/xunxuntu/');
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '60');
+    assert.equal((await request('/admin/streamers', platformCookie)).status, 200);
+  });
   console.log(`${passed} HTTP integration tests passed using local PostgreSQL and isolated auth/storage fixtures.`);
 } finally {
   await app.close();

@@ -106,7 +106,7 @@ npm run dev:local
 | ----------------------------------------------------------------------------- | --------------------------------------------------- |
 | `npm run check`                                                               | TypeScript 与 Svelte 检查                           |
 | `npm run build`                                                               | 生产构建                                            |
-| `npm run test:appearance` / `test:backup` / `test:tags` / `test:music-import` | 原有 33 项回归                                      |
+| `npm run test:appearance` / `test:backup` / `test:tags` / `test:music-import` | 功能回归（含网易云超时）                            |
 | `npm run test:tenants`                                                        | 上下文、PostgreSQL、HTTP 和浏览器多主播测试         |
 | `npm run test:tenant-context`                                                 | 并发上下文、素材路径、域名边界                      |
 | `npm run test:tenant-sql`                                                     | 迁移、事务、RLS 和跨主播约束                        |
@@ -117,7 +117,7 @@ npm run dev:local
 
 PGlite 与 Playwright 仅为开发依赖。Supabase Auth/Storage 的本地服务是测试替身，云端真实认证、对象存储和 DNS/HTTPS 仍需在正式迁移前联调。
 
-完整代码改动及实施情况见 [多主播实施清单](MULTI_TENANT_PLAN.md)，历史见 [更新日志](更新日志.md)。原依赖审计的 18 项问题另行记录，尚未批量升级运行时依赖。
+完整代码改动及实施情况见 [多主播实施清单](MULTI_TENANT_PLAN.md)，历史见 [更新日志](更新日志.md)。2026-10-10 已加强登录限流、公开访问保护、安全响应头并更新依赖；阈值、验证命令及剩余告警见 [安全防护说明](SECURITY.md)。
 
 ## 来源与许可证
 

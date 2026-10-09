@@ -5,9 +5,28 @@ import { localDemo } from '$lib/server/demo';
 import { resolveStreamer, permissions } from '$lib/server/streamers';
 import { tenantContext } from '$lib/server/tenant';
 import { hostSlug, pathContext, validSlug } from '$lib/streamers';
+import { consumePublicRead, securityHeaders } from '$lib/server/security';
 
 export const handle: Handle = async ({ event, resolve }) => {
   const path = pathContext(event.url.pathname);
+  const readPath = path.pathname.replace(/\/__data\.json$/, '') || '/';
+  if (
+    !localDemo &&
+    ['GET', 'HEAD'].includes(event.request.method) &&
+    readPath === '/' &&
+    !consumePublicRead(event.getClientAddress())
+  ) {
+    const response = new Response('访问过于频繁，请稍后重试。', {
+      status: 429,
+      headers: {
+        'Retry-After': '60',
+        'Cache-Control': 'private, no-store',
+        'Content-Type': 'text/plain; charset=utf-8'
+      }
+    });
+    securityHeaders(response.headers);
+    return response;
+  }
   const host = hostSlug(event.url.hostname, env.PUBLIC_ROOT_DOMAIN || 'xs0929.cn');
   if (host && path.slug && host !== path.slug) error(400, '主播子域名和路径不一致。');
   if (path.slug && !validSlug(path.slug)) error(404, '主播不存在。');
@@ -42,6 +61,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     const response = await resolve(event);
     // Avoid caching private data or tenant-specific HTML between hosts/sessions.
     response.headers.set('Cache-Control', 'private, no-store');
+    securityHeaders(response.headers);
     return response;
   });
 };

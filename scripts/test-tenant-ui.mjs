@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
+import { spawn } from 'node:child_process';
 import { startLocalBackend, localKey, localSecret } from './lib/local-backend.mjs';
 
 const backend = await startLocalBackend();
@@ -13,12 +14,25 @@ Object.assign(process.env, {
   LOCAL_DEMO: 'false',
   PUBLIC_ROOT_DOMAIN: 'xs0929.cn'
 });
-const { createServer } = await import('vite');
-const app = await createServer({
+const production = process.env.SECURITY_PRODUCTION_TEST === 'true';
+if (production) {
+  await new Promise((resolve, reject) => {
+    const build = spawn(process.execPath, [process.env.npm_execpath, 'run', 'build'], {
+      env: { ...process.env, NODE_ENV: 'production' },
+      stdio: 'inherit'
+    });
+    build.on('error', reject);
+    build.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`Production build exited ${code}`))));
+  });
+}
+const { createServer, preview } = await import('vite');
+const config = {
   cacheDir: 'node_modules/.vite-tests/tenant-ui',
-  server: { host: '127.0.0.1', port: 5194, strictPort: true }
-});
-await app.listen();
+  server: { host: '127.0.0.1', port: 5194, strictPort: true },
+  preview: { host: '127.0.0.1', port: 5194, strictPort: true }
+};
+const app = production ? await preview(config) : await createServer(config);
+if (!production) await app.listen();
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.PLAYWRIGHT_CHANNEL === 'chromium' ? {} : { channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' })
@@ -35,8 +49,23 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error' && /content security policy|refused to execute/i.test(message.text()))
+      errors.push(message.text());
+  });
   await test('directory navigation hydrates and loads only the selected streamer', async () => {
-    await page.goto(origin, { waitUntil: 'networkidle' });
+    const response = await page.goto(origin, { waitUntil: 'networkidle' });
+    if (production) {
+      const csp = response.headers()['content-security-policy'];
+      assert.ok(csp.includes('script-src') && csp.includes("'nonce-"), csp);
+      assert.ok(
+        await page
+          .locator('script:not([src])')
+          .evaluateAll((scripts) =>
+            scripts.filter((s) => !s.type || s.type === 'module').every((s) => Boolean(s.nonce))
+          )
+      );
+    }
     await page.getByRole('link', { name: /Siro0/ }).click();
     await page.getByRole('heading', { name: 'Siro0 歌单' }).waitFor();
     assert.ok(!(await page.locator('body').innerText()).includes('薰薰兔本地歌曲'));
@@ -269,27 +298,42 @@ try {
       });
       assert.equal(login.status(), 200);
     });
-    await test('an already running legacy local fixture can delete one songlist without restarting or clearing others', async () => {
-      const oldId = '77777777-7777-4777-8777-777777777777';
-      await backend.db.query('select create_streamer($1,$2,$3)', [oldId, 'legacy-local', '旧本地实验']);
-      await backend.db.exec('drop function public.delete_streamer(uuid)');
-      const before = (await backend.db.query('select * from songs where streamer_id=$1 order by id', [backend.ids.b]))
-        .rows;
-      await admin.reload({ waitUntil: 'networkidle' });
-      const oldCard = admin
-        .locator('section')
-        .filter({ has: admin.getByRole('heading', { name: '旧本地实验 · legacy-local' }) });
-      admin.once('dialog', async (dialog) => {
-        await dialog.accept();
-      });
-      await oldCard.getByRole('button', { name: '删除歌单', exact: true }).click();
-      await oldCard.waitFor({ state: 'detached' });
-      assert.equal((await backend.db.query('select * from streamers where id=$1', [oldId])).rows.length, 0);
-      assert.deepEqual(
-        (await backend.db.query('select * from songs where streamer_id=$1 order by id', [backend.ids.b])).rows,
-        before
-      );
-    });
+    await test(
+      production
+        ? 'production rejects missing deletion RPC without using the development fallback'
+        : 'an already running legacy local fixture can delete one songlist without restarting or clearing others',
+      async () => {
+        const oldId = '77777777-7777-4777-8777-777777777777';
+        await backend.db.query('select create_streamer($1,$2,$3)', [oldId, 'legacy-local', '旧本地实验']);
+        await backend.db.exec('drop function public.delete_streamer(uuid)');
+        const before = (await backend.db.query('select * from songs where streamer_id=$1 order by id', [backend.ids.b]))
+          .rows;
+        await admin.reload({ waitUntil: 'networkidle' });
+        const oldCard = admin
+          .locator('section')
+          .filter({ has: admin.getByRole('heading', { name: '旧本地实验 · legacy-local' }) });
+        admin.once('dialog', async (dialog) => {
+          await dialog.accept();
+        });
+        const deleted = admin.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/delete'));
+        await oldCard.getByRole('button', { name: '删除歌单', exact: true }).click();
+        const deleteResult = await (await deleted).json();
+        assert.equal(deleteResult.type, production ? 'failure' : 'success');
+        if (production)
+          await oldCard
+            .getByText('删除功能的数据库升级尚未加载，请执行 20261003_delete_streamer.sql。', { exact: true })
+            .waitFor();
+        else await oldCard.waitFor({ state: 'detached' });
+        assert.equal(
+          (await backend.db.query('select * from streamers where id=$1', [oldId])).rows.length,
+          production ? 1 : 0
+        );
+        assert.deepEqual(
+          (await backend.db.query('select * from songs where streamer_id=$1 order by id', [backend.ids.b])).rows,
+          before
+        );
+      }
+    );
     await test('only unassigned accounts can be permanently deleted after confirmation; deletion prevents login', async () => {
       await admin.reload({ waitUntil: 'networkidle' });
       const accounts = admin.locator('#accounts');
@@ -308,11 +352,17 @@ try {
         0
       );
       for (const userId of [backend.ids.admin, backend.ids.aUser]) {
-        const result = await admin.request.post(origin + '/admin/streamers?/deleteAccount', {
-          form: { userId },
-          headers: { Origin: origin, Accept: 'text/html' }
-        });
-        assert.equal(result.status(), 400);
+        // Use the actual browser session, including Secure loopback cookies.
+        const status = await admin.evaluate(async (userId) => {
+          const response = await fetch('/admin/streamers?/deleteAccount', {
+            method: 'POST',
+            body: new URLSearchParams({ userId }),
+            headers: { Accept: 'text/html' },
+            redirect: 'manual'
+          });
+          return response.status;
+        }, userId);
+        assert.equal(status, 400);
         assert.ok(backend.users.has(userId));
       }
       const user = [...backend.users.values()].find((u) => u.email === '111@local.test');
@@ -364,6 +414,7 @@ try {
   );
 } finally {
   await browser.close();
-  await app.close();
+  if (production) await new Promise((resolve) => app.httpServer.close(resolve));
+  else await app.close();
   await backend.close();
 }

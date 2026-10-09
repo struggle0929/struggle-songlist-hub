@@ -5,6 +5,7 @@
   "license": "Parity-7.0.0",
   "type": "module",
   "scripts": {
+    "test:security": "node scripts/test-security.mjs",
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
@@ -27,8 +28,8 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@sveltejs/adapter-auto": "^7.0.1",
-    "@sveltejs/kit": "^2.57.1",
-    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^25.6.0",
     "husky": "^9.1.7",
@@ -38,19 +39,25 @@
     "prettier-plugin-svelte": "^3.5.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "supabase": "^2.95.3",
-    "svelte": "^5.55.4",
+    "svelte": "5.57.2",
     "svelte-check": "^4.4.6",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.3",
-    "vite": "^8.0.9"
+    "vite": "8.3.4"
   },
   "dependencies": {
-    "@neteasecloudmusicapienhanced/api": "^4.32.0",
-    "@supabase/supabase-js": "^2.104.0",
+    "@neteasecloudmusicapienhanced/api": "4.41.1",
+    "@supabase/supabase-js": "2.117.3",
     "bits-ui": "^2.18.0",
     "svelte-sonner": "^1.1.0",
     "zod": "^4.3.6",
     "zod-form-data": "^3.0.1"
+  },
+  "overrides": {
+    "@sveltejs/kit": {
+      "cookie": "0.7.2"
+    },
+    "basic-ftp": "6.2.3"
   },
   "lint-staged": {
     "*.{js,ts,svelte,css,html,json,md}": "prettier --write"

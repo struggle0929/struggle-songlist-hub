@@ -1,8 +1,8 @@
 import { UserFacingError } from '$lib/server/errors';
 
 type NeteaseApi = {
-  playlist_detail: (params: { id: string }) => Promise<NeteasePlaylistResponse>;
-  song_detail: (params: { ids: string }) => Promise<NeteaseSongResponse>;
+  playlist_detail: (params: { id: string; timeout: number }) => Promise<NeteasePlaylistResponse>;
+  song_detail: (params: { ids: string; timeout: number }) => Promise<NeteaseSongResponse>;
 };
 
 type NeteaseArtist = {
@@ -126,7 +126,7 @@ const fetchSongDetails = async (api: NeteaseApi, ids: string[], errorMessage: st
 
   for (let index = 0; index < ids.length; index += songDetailBatchSize) {
     const batchIds = ids.slice(index, index + songDetailBatchSize);
-    const detail = await api.song_detail({ ids: batchIds.join(',') });
+    const detail = await api.song_detail({ ids: batchIds.join(','), timeout: 30_000 });
     const detailTracks = detail.body?.songs;
 
     if (detail.body?.code !== 200 || !Array.isArray(detailTracks)) {
@@ -142,7 +142,7 @@ const fetchSongDetails = async (api: NeteaseApi, ids: string[], errorMessage: st
 export const fetchNeteasePlaylistSongs = async (playlistInput: string, maxSongs: number) => {
   const playlistId = extractPlaylistId(playlistInput);
   const api = await getNeteaseApi();
-  const response = await api.playlist_detail({ id: playlistId });
+  const response = await api.playlist_detail({ id: playlistId, timeout: 30_000 });
   const trackIds = response.body?.playlist?.trackIds;
 
   if (response.body?.code !== 200 || !Array.isArray(trackIds)) {
