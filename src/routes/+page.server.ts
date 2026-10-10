@@ -77,7 +77,7 @@ export const actions: Actions = {
           songInput: parsed.data.songInput,
           songTitle: song.title,
           artist: song.artist,
-          language: inferSongLanguage(song.title, song.artist)
+          language: song.language ?? inferSongLanguage(song.title, song.artist)
         }
       };
     } catch (error) {

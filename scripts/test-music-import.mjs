@@ -187,12 +187,130 @@ try {
         assert.equal(params.timeout, 30_000);
         return { body: { code: 200, playlist: { trackIds: [{ id: 123 }] } } };
       };
-      assert.deepEqual(await fetchMusicTracks('netease', '123', 'song'), [{ title: '测试歌曲', artist: '测试原唱' }]);
+      assert.deepEqual(await fetchMusicTracks('netease', '123', 'song'), [
+        { title: '测试歌曲', artist: '测试原唱', language: '中文' }
+      ]);
       assert.deepEqual(await fetchMusicTracks('netease', '123', 'playlist'), [
-        { title: '测试歌曲', artist: '测试原唱' }
+        { title: '测试歌曲', artist: '测试原唱', language: '中文' }
       ]);
     } finally {
       api.song_detail = originalSong;
+      api.playlist_detail = originalPlaylist;
+    }
+  });
+  await test('language inference uses lyric content, strips credits and avoids English-title/artist guesses', async () => {
+    const { inferLyricLanguage, inferSongLanguage, explicitSongLanguage } =
+      await server.ssrLoadModule('/src/lib/language.ts');
+    assert.equal(inferSongLanguage('Butter-Fly', '和田光司'), '其他');
+    assert.equal(inferSongLanguage('Hello', '日本歌手'), '其他');
+    assert.equal(
+      inferLyricLanguage('[00:00]作词：日本の作家\n[00:10]这是我们一起唱过的歌也是心中的梦想让我们一起勇敢向前走'),
+      '中文'
+    );
+    assert.equal(
+      inferLyricLanguage('[00:12]きらめく夢を追いかけて\n[00:20]どこまでも飛んでゆこう\n[00:30]Butter Fly'),
+      '日语'
+    );
+    assert.equal(
+      inferLyricLanguage('[00:00]I love you and you are in my heart\n[00:10]We are together and this is our love'),
+      '英语'
+    );
+    assert.equal(inferLyricLanguage('Bonjour mon amour je cherche encore une belle chanson pour demain'), undefined);
+    assert.equal(inferLyricLanguage('[00:00]纯音乐，请欣赏'), undefined);
+    assert.equal(inferLyricLanguage('[00:00]作词：和田光司'), undefined);
+    assert.equal(inferLyricLanguage('你好'), undefined);
+    assert.equal(explicitSongLanguage(2), undefined);
+    assert.equal(explicitSongLanguage('Japanese'), '日语');
+  });
+  await test('NetEase original lyrics override title, cache results, ignore translations and tolerate failures', async () => {
+    const api = (await import('@neteasecloudmusicapienhanced/api')).default;
+    const originalSong = api.song_detail,
+      originalLyric = api.lyric,
+      originalPlaylist = api.playlist_detail;
+    let id = 990001,
+      lyricCalls = 0;
+    try {
+      api.song_detail = async () => ({
+        body: {
+          code: 200,
+          songs: [
+            { id, name: 'Butter-Fly', ar: [{ name: '和田光司' }], ...(id === 990004 ? { language: 'English' } : {}) }
+          ]
+        }
+      });
+      api.playlist_detail = async () => ({ body: { code: 200, playlist: { trackIds: [{ id }] } } });
+      api.lyric = async (params) => {
+        lyricCalls++;
+        assert.equal(params.timeout, 3000);
+        assert.equal(params.id, String(id));
+        if (id === 990003) throw new Error('provider unavailable');
+        return {
+          body: {
+            code: 200,
+            lrc: { lyric: id === 990002 ? '' : '[00:12]きらめく夢を追いかけて\n[00:20]どこまでも飛んでゆこう' },
+            tlyric: { lyric: '这是我们一起唱过的歌也是心中的梦想让我们一起勇敢向前走' }
+          }
+        };
+      };
+      assert.equal((await fetchMusicTracks('netease', String(id), 'song'))[0].language, '日语');
+      assert.equal((await fetchMusicTracks('netease', String(id), 'playlist'))[0].language, '日语');
+      assert.equal(lyricCalls, 1);
+      id = 990002;
+      assert.equal((await fetchMusicTracks('netease', String(id), 'song'))[0].language, '其他');
+      id = 990003;
+      assert.equal((await fetchMusicTracks('netease', String(id), 'song'))[0].language, '其他');
+      id = 990004;
+      assert.equal((await fetchMusicTracks('netease', String(id), 'song'))[0].language, '英语');
+      assert.equal(lyricCalls, 3);
+    } finally {
+      api.song_detail = originalSong;
+      api.lyric = originalLyric;
+      api.playlist_detail = originalPlaylist;
+    }
+  });
+  await test('lyric lookups have bounded concurrency and playlist count; timeout preserves import', async () => {
+    const api = (await import('@neteasecloudmusicapienhanced/api')).default;
+    const originalSong = api.song_detail,
+      originalLyric = api.lyric,
+      originalPlaylist = api.playlist_detail;
+    let active = 0,
+      peak = 0,
+      count = 0,
+      timeout = false;
+    try {
+      api.playlist_detail = async () => ({
+        body: { code: 200, playlist: { trackIds: Array.from({ length: 100 }, (_, i) => ({ id: 991000 + i })) } }
+      });
+      api.song_detail = async () => ({
+        body: {
+          code: 200,
+          songs: timeout
+            ? [{ id: 992000, name: 'Hello', ar: [{ name: 'Artist' }] }]
+            : Array.from({ length: 100 }, (_, i) => ({ id: 991000 + i, name: 'Hello', ar: [{ name: 'Artist' }] }))
+        }
+      });
+      api.lyric = async () => {
+        if (timeout) return new Promise(() => {});
+        count++;
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        active--;
+        return { body: { code: 200, lrc: { lyric: 'きらめく夢を追いかけてどこまでも飛んでゆこう' } } };
+      };
+      const songs = await fetchMusicTracks('netease', '991000', 'playlist');
+      assert.equal(songs.length, 100);
+      assert.equal(count, 80);
+      assert.ok(peak <= 4);
+      assert.equal(songs[0].language, '日语');
+      assert.equal(songs[99].language, '其他');
+      timeout = true;
+      const start = Date.now();
+      assert.equal((await fetchMusicTracks('netease', '992000', 'song'))[0].language, '其他');
+      assert.ok(Date.now() - start < 4500);
+    } finally {
+      api.song_detail = originalSong;
+      api.lyric = originalLyric;
       api.playlist_detail = originalPlaylist;
     }
   });

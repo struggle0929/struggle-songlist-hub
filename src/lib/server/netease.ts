@@ -1,8 +1,13 @@
 import { UserFacingError } from '$lib/server/errors';
+import { explicitSongLanguage, inferLyricLanguage, inferSongLanguage } from '$lib/language';
+import type { SongLanguage } from '$lib/types';
 
 type NeteaseApi = {
   playlist_detail: (params: { id: string; timeout: number }) => Promise<NeteasePlaylistResponse>;
   song_detail: (params: { ids: string; timeout: number }) => Promise<NeteaseSongResponse>;
+  lyric: (params: { id: string; timeout: number }) => Promise<{
+    body?: { code?: number; lrc?: { lyric?: unknown } };
+  }>;
 };
 
 type NeteaseArtist = {
@@ -10,8 +15,10 @@ type NeteaseArtist = {
 };
 
 type NeteaseTrack = {
+  id?: unknown;
   name?: unknown;
   ar?: unknown;
+  language?: unknown;
 };
 
 type NeteasePlaylistResponse = {
@@ -33,6 +40,7 @@ type NeteaseSongResponse = {
 export type NeteasePlaylistSong = {
   title: string;
   artist: string;
+  language?: SongLanguage;
 };
 
 type NeteaseTrackId = {
@@ -42,6 +50,69 @@ type NeteaseTrackId = {
 const songDetailBatchSize = 1000;
 const playlistReadErrorMessage = '读取网易云公开歌单失败。';
 const songReadErrorMessage = '读取网易云单曲失败。';
+
+const languageCache = new Map<string, { language?: SongLanguage; expires: number }>();
+const pendingLanguages = new Map<string, Promise<SongLanguage | undefined>>();
+async function lyricLanguage(api: NeteaseApi, id: string): Promise<SongLanguage | undefined> {
+  const cached = languageCache.get(id);
+  if (cached && cached.expires > Date.now()) return cached.language;
+  const pending = pendingLanguages.get(id);
+  if (pending) return pending;
+  // Bound total outstanding requests across simultaneous previews in this instance.
+  if (pendingLanguages.size >= 16) return undefined;
+  const task = (async () => {
+    let language: SongLanguage | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const response = await Promise.race([
+        api.lyric({ id, timeout: 3000 }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('lyric timeout')), 3200);
+        })
+      ]);
+      // lrc is the original lyric. Never classify tlyric (translation) or romalrc.
+      if (response.body?.code === 200) language = inferLyricLanguage(response.body.lrc?.lyric);
+    } catch {
+      // Missing/restricted lyrics must never prevent song import.
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    if (languageCache.size >= 2000) languageCache.delete(languageCache.keys().next().value!);
+    languageCache.set(id, { language, expires: Date.now() + (language ? 3_600_000 : 30_000) });
+    return language;
+  })();
+  pendingLanguages.set(id, task);
+  try {
+    return await task;
+  } finally {
+    pendingLanguages.delete(id);
+  }
+}
+
+async function identifyTrackLanguages(api: NeteaseApi, tracks: NeteaseTrack[], errorMessage: string) {
+  const songs = tracks.map((track) => ({
+    ...mapTrack(track, errorMessage),
+    language:
+      explicitSongLanguage(track.language) || inferSongLanguage(typeof track.name === 'string' ? track.name : '')
+  }));
+  let cursor = 0;
+  const deadline = Date.now() + 8000;
+  // Keep large playlists responsive: at most 80 lyric lookups, four workers,
+  // no new request after the eight-second budget. Remaining rows stay editable.
+  await Promise.all(
+    Array.from({ length: Math.min(4, tracks.length) }, async () => {
+      while (cursor < Math.min(tracks.length, 80) && Date.now() < deadline) {
+        const index = cursor++;
+        const track = tracks[index];
+        if (explicitSongLanguage(track.language)) continue;
+        if (typeof track.id !== 'number' || !Number.isSafeInteger(track.id) || track.id <= 0) continue;
+        const language = await lyricLanguage(api, String(track.id));
+        if (language) songs[index].language = language;
+      }
+    })
+  );
+  return songs;
+}
 
 const getNeteaseApi = async () =>
   ((await import('@neteasecloudmusicapienhanced/api')) as { default: NeteaseApi }).default;
@@ -154,7 +225,7 @@ export const fetchNeteasePlaylistSongs = async (playlistInput: string, maxSongs:
   }
 
   const tracks = await fetchSongDetails(api, parseTrackIds(trackIds), playlistReadErrorMessage);
-  const songs = tracks.map((track) => mapTrack(track, playlistReadErrorMessage));
+  const songs = await identifyTrackLanguages(api, tracks, playlistReadErrorMessage);
 
   if (songs.length === 0) {
     throw new UserFacingError('这个歌单没有可导入的歌曲。');
@@ -172,5 +243,5 @@ export const fetchNeteaseSong = async (songInput: string) => {
     throw new UserFacingError(songReadErrorMessage);
   }
 
-  return mapTrack(track, songReadErrorMessage);
+  return (await identifyTrackLanguages(api, [track], songReadErrorMessage))[0];
 };

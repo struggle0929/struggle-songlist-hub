@@ -86,7 +86,11 @@ export const actions: Actions = {
           sourceKind: kind,
           sourceInput: musicInput,
           status: 'ready',
-          songs: songs.map((song) => ({ ...song, language: inferSongLanguage(song.title, song.artist), tagsInput: '' }))
+          songs: songs.map((song) => ({
+            ...song,
+            language: song.language ?? inferSongLanguage(song.title, song.artist),
+            tagsInput: ''
+          }))
         }
       };
     } catch (error) {
@@ -218,7 +222,7 @@ export const actions: Actions = {
           status: 'ready',
           songs: playlistSongs.map((song) => ({
             ...song,
-            language: inferSongLanguage(song.title, song.artist),
+            language: song.language ?? inferSongLanguage(song.title, song.artist),
             tagsInput: ''
           }))
         }
@@ -264,7 +268,7 @@ export const actions: Actions = {
           songs: [
             {
               ...song,
-              language: inferSongLanguage(song.title, song.artist),
+              language: song.language ?? inferSongLanguage(song.title, song.artist),
               tagsInput: ''
             }
           ]

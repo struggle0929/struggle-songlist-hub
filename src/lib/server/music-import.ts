@@ -3,8 +3,10 @@ import { musicProviderLabel, type MusicProvider } from '$lib/music-import';
 import { UserFacingError } from '$lib/server/errors';
 import { musicUrl, readMusicUrl } from '$lib/server/music-http';
 import { fetchNeteasePlaylistSongs, fetchNeteaseSong } from '$lib/server/netease';
+import { explicitSongLanguage } from '$lib/language';
+import type { SongLanguage } from '$lib/types';
 
-type Track = { title: string; artist: string };
+type Track = { title: string; artist: string; language?: SongLanguage };
 
 export function extractMusicLink(input: string) {
   const link = input.match(/https?:\/\/[^\s<>"'，。；）】]+/i)?.[0];
@@ -100,7 +102,12 @@ export function parseKugouTracks(html: string): Track[] {
 
 const mapQQ = (input: unknown): Track => {
   const row = qqTrack.parse(input);
-  return { title: row.name ?? row.songname!, artist: row.singer.map((singer) => singer.name).join(' / ') };
+  const language = explicitSongLanguage((input as { language?: unknown }).language);
+  return {
+    title: row.name ?? row.songname!,
+    artist: row.singer.map((singer) => singer.name).join(' / '),
+    ...(language ? { language } : {})
+  };
 };
 const qqPlaylist = z.object({
   code: z.literal(0),

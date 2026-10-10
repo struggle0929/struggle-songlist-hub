@@ -66,7 +66,7 @@
           class="rounded-[18px] border border-[var(--color-accent-surface-border)] bg-[var(--color-accent-surface-bg)] px-4 py-3 text-sm text-[var(--color-text-secondary)]"
         >
           <p class="font-medium text-[var(--color-text)]">{preview.songs.length} 首待确认</p>
-          <p class="mt-1 text-xs">语言为自动推断结果，导入前请手动核对。</p>
+          <p class="mt-1 text-xs">语言优先参考平台信息与可获取的原文歌词。无法确定时归为“其他”，导入前请核对。</p>
         </div>
 
         <div class="max-h-[56vh] overflow-auto rounded-[18px] border border-[var(--color-border-soft)]">
