@@ -11,7 +11,7 @@ export const cursorLabels: Record<CursorState, string> = {
   wait: '等待 / 忙碌'
 };
 export const staticStates = cursorStates.slice(0, 3);
-export const defaultFavicon = '/favicon.svg';
+export const defaultFavicon = '/favicon.svg?v=songlist-1';
 export type CursorAsset = { file: string; hotspot: [number, number] };
 export type Appearance = {
   siteTitle: string;

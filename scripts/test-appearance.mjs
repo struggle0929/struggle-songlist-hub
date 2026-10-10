@@ -187,7 +187,7 @@ try {
     assert.equal(resolveFavicon(appearance, 'deployment.png'), 'uploaded.png');
     appearance.favicon = '';
     assert.equal(resolveFavicon(appearance, 'deployment.png'), 'deployment.png');
-    assert.equal(resolveFavicon(appearance, ''), '/favicon.svg');
+    assert.equal(resolveFavicon(appearance, ''), '/favicon.svg?v=songlist-1');
   });
   await test('header defaults, independent text saves and blur preserve cursor and asset settings', async () => {
     assert.equal(parseAppearance().headerTitle, '');
