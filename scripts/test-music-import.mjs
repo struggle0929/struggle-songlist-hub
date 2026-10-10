@@ -33,6 +33,51 @@ try {
   const { fetchMusicTracks, parseKugouTracks, detectMusicLink, extractMusicLink, fetchSharedMusic } =
     await server.ssrLoadModule('/src/lib/server/music-import.ts');
   const { musicUrl, readMusicUrl } = await server.ssrLoadModule('/src/lib/server/music-http.ts');
+  await test('music-only transport retries once, reports safe network codes and never logs share tokens', async () => {
+    let attempts = 0;
+    globalThis.fetch = async (_url, options) => {
+      assert.ok(options.dispatcher);
+      assert.equal(options.redirect, 'manual');
+      if (++attempts === 1)
+        throw new TypeError('fetch failed', {
+          cause: Object.assign(new Error('connect timeout'), { code: 'ETIMEDOUT' })
+        });
+      return reply('ok');
+    };
+    assert.equal((await readMusicUrl('https://t1.kugou.com/test', 'kugou', AbortSignal.timeout(1000))).text, 'ok');
+    assert.equal(attempts, 2);
+    const warning = console.warn;
+    const messages = [];
+    try {
+      console.warn = (...items) => messages.push(JSON.stringify(items));
+      attempts = 0;
+      globalThis.fetch = async () => {
+        attempts++;
+        throw new TypeError('fetch failed', {
+          cause: Object.assign(new Error('timeout'), { code: 'UND_ERR_CONNECT_TIMEOUT' })
+        });
+      };
+      await assert.rejects(
+        () =>
+          readMusicUrl(
+            'https://c6.y.qq.com/base/fcgi-bin/u?__=secret-share-token',
+            'qqmusic',
+            AbortSignal.timeout(1000)
+          ),
+        /QQ音乐连接失败（UND_ERR_CONNECT_TIMEOUT）/
+      );
+      assert.equal(attempts, 2);
+      assert.ok(messages.join('').includes('c6.y.qq.com'));
+      assert.ok(!messages.join('').includes('secret-share-token'));
+      const abort = new AbortController();
+      abort.abort();
+      attempts = 0;
+      await assert.rejects(() => readMusicUrl('https://t1.kugou.com/test', 'kugou', abort.signal), /连接失败/);
+      assert.equal(attempts, 1);
+    } finally {
+      console.warn = warning;
+    }
+  });
   const { markImportDuplicates } = await server.ssrLoadModule('/src/lib/import-duplicates.ts');
   const { fetchMusicLanguageBatch, validLyricId } = await server.ssrLoadModule('/src/lib/server/music-language.ts');
   const { fetchKugouPlaylist } = await server.ssrLoadModule('/src/lib/server/kugou-playlist.ts');
@@ -52,7 +97,6 @@ try {
       reply(JSON.stringify({ error_code: 0, data: { begin_idx: begin, count, songs, list_info: { is_pri: 0 } } }));
     mock(
       reply('', 302, { location: `https://wwwapi.kugou.com/share/zlist.html?global_collection_id=${gid}` }),
-      reply(preview),
       page(
         0,
         127,
@@ -70,8 +114,8 @@ try {
     assert.equal(songs[126].artist, 'A / B');
     assert.equal(songs[126].lyricId, String(126).padStart(32, '0'));
     assert.equal(songs[126].languageSource, 'metadata');
-    assert.equal(new URL(calls[2]).searchParams.get('global_collection_id'), gid);
-    assert.equal(new URL(calls[3]).searchParams.get('begin_idx'), '100');
+    assert.equal(new URL(calls[1]).searchParams.get('global_collection_id'), gid);
+    assert.equal(new URL(calls[2]).searchParams.get('begin_idx'), '100');
     mock(reply(preview));
     await assert.rejects(
       () => fetchMusicTracks('kugou', 'https://wwwapi.kugou.com/share/zlist.html', 'playlist'),
@@ -207,8 +251,6 @@ try {
     assert.throws(() => extractMusicLink('186016'), /分享链接/);
     mock(
       reply('', 302, { location: 'https://y.qq.com/n/ryqq_v2/songDetail/242254267' }),
-      reply('html'),
-      reply('html'),
       reply(JSON.stringify({ code: 0, data: [track('悬溺')] }))
     );
     const result = await fetchSharedMusic('https://c6.y.qq.com/base/fcgi-bin/u?__=x');
@@ -283,13 +325,12 @@ try {
   await test('QQ song resolves numeric ID and combines multiple artists', async () => {
     mock(
       reply('', 302, { location: 'https://y.qq.com/n/ryqq_v2/songDetail/242254267' }),
-      reply('html'),
       reply(JSON.stringify({ code: 0, data: [track('悬溺')] }))
     );
     assert.deepEqual(await fetchMusicTracks('qqmusic', 'https://c6.y.qq.com/base/fcgi-bin/u?__=x', 'song'), [
       { title: '悬溺', artist: 'A / B' }
     ]);
-    assert.equal(new URL(calls[2]).searchParams.get('songid'), '242254267');
+    assert.equal(new URL(calls[1]).searchParams.get('songid'), '242254267');
   });
   await test('QQ playlists paginate, enforce limits and reject missing/repeated pages', async () => {
     const page = (songs, total = 2) =>

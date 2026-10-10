@@ -51,6 +51,7 @@
     "@supabase/supabase-js": "2.117.3",
     "bits-ui": "^2.18.0",
     "svelte-sonner": "^1.1.0",
+    "undici": "^7.30.0",
     "zod": "^4.3.6",
     "zod-form-data": "^3.0.1"
   },

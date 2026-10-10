@@ -53,7 +53,14 @@ export async function fetchSharedMusic(input: string, maxSongs = 5000) {
   let detected = detectMusicLink(link);
   if (!detected.kind) {
     try {
-      link = (await readMusicUrl(link, detected.provider, AbortSignal.timeout(30000))).url.href;
+      link = (
+        await readMusicUrl(
+          link,
+          detected.provider,
+          AbortSignal.timeout(30000),
+          (url) => !!detectMusicLink(url.href).kind
+        )
+      ).url.href;
       detected = detectMusicLink(link);
     } catch (error) {
       if (error instanceof UserFacingError) throw error;
@@ -132,7 +139,8 @@ const qqPlaylist = z.object({
 async function qqId(input: string, kind: 'song' | 'playlist', signal: AbortSignal) {
   const raw = input.trim();
   if (/^\d+$/.test(raw) || (kind === 'song' && /^[A-Za-z0-9]{14}$/.test(raw))) return raw;
-  const { url } = await readMusicUrl(raw, 'qqmusic', signal);
+  const direct = musicUrl(raw, 'qqmusic');
+  const { url } = await readMusicUrl(direct.href, 'qqmusic', signal, (url) => !!detectMusicLink(url.href).kind);
   const id =
     kind === 'song'
       ? (url.pathname.match(/\/(?:songDetail|song)\/([A-Za-z0-9]+)(?:\.html)?/)?.[1] ??
@@ -207,16 +215,27 @@ export async function fetchMusicTracks(
     let songs: Track[];
     if (provider === 'qqmusic') songs = await qqSongs(input, kind, maxSongs, signal);
     else {
-      const { text, url } = await readMusicUrl(input.trim(), 'kugou', signal);
-      if (kind === 'song' && /zlist|songlist|special/.test(url.pathname))
-        throw new UserFacingError('请在歌单导入栏填写此链接。');
-      if (kind === 'playlist' && !/zlist|songlist|special/.test(url.pathname))
-        throw new UserFacingError('请填写酷狗公开歌单分享链接。');
-      const collectionId = kind === 'playlist' ? kugouCollectionId(url) : undefined;
-      songs = collectionId ? await fetchKugouPlaylist(collectionId, maxSongs, signal) : parseKugouTracks(text);
-      if (kind === 'playlist' && !collectionId && [10, 100].includes(songs.length))
-        throw new UserFacingError('酷狗分享页可能只返回部分歌曲，请重新复制包含完整歌单编号的分享链接。');
-      if (kind === 'song' && songs.length !== 1) throw new UserFacingError('请填写酷狗单曲分享链接。');
+      const direct = musicUrl(input.trim(), 'kugou');
+      const directCollection = kind === 'playlist' ? kugouCollectionId(direct) : undefined;
+      if (directCollection) {
+        songs = await fetchKugouPlaylist(directCollection, maxSongs, signal);
+      } else {
+        const { text, url } = await readMusicUrl(
+          input.trim(),
+          'kugou',
+          signal,
+          (url) => kind === 'playlist' && !!kugouCollectionId(url)
+        );
+        if (kind === 'song' && /zlist|songlist|special/.test(url.pathname))
+          throw new UserFacingError('请在歌单导入栏填写此链接。');
+        if (kind === 'playlist' && !/zlist|songlist|special/.test(url.pathname))
+          throw new UserFacingError('请填写酷狗公开歌单分享链接。');
+        const collectionId = kind === 'playlist' ? kugouCollectionId(url) : undefined;
+        songs = collectionId ? await fetchKugouPlaylist(collectionId, maxSongs, signal) : parseKugouTracks(text);
+        if (kind === 'playlist' && !collectionId && [10, 100].includes(songs.length))
+          throw new UserFacingError('酷狗分享页可能只返回部分歌曲，请重新复制包含完整歌单编号的分享链接。');
+        if (kind === 'song' && songs.length !== 1) throw new UserFacingError('请填写酷狗单曲分享链接。');
+      }
     }
     if (!songs.length) throw new UserFacingError('这个歌单没有可导入的歌曲。');
     if (songs.length > maxSongs) throw new UserFacingError(`单次最多导入 ${maxSongs} 首歌曲。`);
