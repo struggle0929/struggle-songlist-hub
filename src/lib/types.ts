@@ -71,6 +71,7 @@ export interface ImportPreview {
     language: string;
     tagsInput: string;
     neteaseId?: string;
+    lyricId?: string;
     languageSource?: 'metadata' | 'lyrics' | 'title' | 'unknown';
   }>;
 }

@@ -39,6 +39,21 @@ try {
   let generation = 0;
   let customPreview;
   await page.route('**/*', async (route) => {
+    if (route.request().url().includes('?/identifyLanguages') && customPreview?.songs[0]?.lyricId) {
+      assert.ok(route.request().postData().includes(customPreview.provider));
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          type: 'success',
+          status: 200,
+          data: stringify({
+            languageResults: customPreview.songs.map((song) => ({ id: song.lyricId, language: '日语' }))
+          })
+        })
+      });
+      return;
+    }
     if (!route.request().url().includes('?/previewMusic')) return route.continue();
     const mixed = generation === 2;
     const start = 996000 + generation++ * 100;
@@ -182,6 +197,41 @@ try {
     );
     console.log(
       `PASS ${provider} duplicates default unchecked, precede review rows, preserve versions and allow explicit reselection`
+    );
+  }
+  for (const provider of ['kugou', 'qqmusic']) {
+    customPreview = {
+      provider,
+      sourceKind: 'playlist',
+      sourceInput: 'fixture',
+      status: 'ready',
+      songs: [0, 1].map((i) => ({
+        title: `Lyrics ${provider} ${i}`,
+        artist: 'Artist',
+        language: '其他',
+        languageSource: 'unknown',
+        lyricId: provider === 'kugou' ? String(i + 1).repeat(32) : String(991200 + i),
+        tagsInput: ''
+      }))
+    };
+    await openPreview();
+    const songRows = dialog.locator('tbody tr');
+    await songRows.first().locator('button.select-trigger').click();
+    await page.getByRole('option', { name: '中文', exact: true }).click();
+    await dialog.getByText('歌词检查：2/2；待核对：0', { exact: true }).waitFor();
+    assert.equal(await songRows.first().locator('[name=songLanguage]').inputValue(), '中文');
+    assert.equal(await songRows.last().locator('[name=songLanguage]').inputValue(), '日语');
+    await dialog.getByRole('button', { name: '导入勾选歌曲' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    const stored = (
+      await backend.db.query('select language from songs where title like $1 order by title', [`Lyrics ${provider} %`])
+    ).rows;
+    assert.deepEqual(
+      stored.map((song) => song.language),
+      ['中文', '日语']
+    );
+    console.log(
+      `PASS ${provider} lyric progress, provider dispatch and manual edits survive classification and import`
     );
   }
   assert.deepEqual(errors, []);

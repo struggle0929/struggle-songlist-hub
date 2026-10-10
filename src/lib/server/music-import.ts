@@ -6,7 +6,7 @@ import { fetchNeteasePlaylistSongs, fetchNeteaseSong } from '$lib/server/netease
 import { explicitSongLanguage } from '$lib/language';
 import type { SongLanguage } from '$lib/types';
 
-type Track = { title: string; artist: string; language?: SongLanguage };
+type Track = { title: string; artist: string; language?: SongLanguage; lyricId?: string; languageSource?: 'metadata' };
 
 export function extractMusicLink(input: string) {
   const link = input.match(/https?:\/\/[^\s<>"'，。；）】]+/i)?.[0];
@@ -64,7 +64,7 @@ export async function fetchSharedMusic(input: string, maxSongs = 5000) {
   return { ...detected, songs };
 }
 const name = z.string().trim().min(1);
-const kugouTrack = z.object({ song_name: name, author_name: name });
+const kugouTrack = z.object({ song_name: name, author_name: name, hash: z.unknown().optional() });
 const qqTrack = z
   .object({ name: name.optional(), songname: name.optional(), singer: z.array(z.object({ name })).min(1) })
   .refine((song) => !!(song.name || song.songname));
@@ -89,6 +89,9 @@ export function parseKugouTracks(html: string): Track[] {
       const rows = z.array(kugouTrack).parse(JSON.parse(html.slice(start, i + 1)));
       return rows.map((row) => ({
         title: row.song_name,
+        ...(typeof row.hash === 'string' && /^[a-f0-9]{32}$/i.test(row.hash)
+          ? { lyricId: row.hash.toUpperCase() }
+          : {}),
         artist: row.author_name
           .split('、')
           .map((part) => part.trim())
@@ -103,10 +106,14 @@ export function parseKugouTracks(html: string): Track[] {
 const mapQQ = (input: unknown): Track => {
   const row = qqTrack.parse(input);
   const language = explicitSongLanguage((input as { language?: unknown }).language);
+  const raw = input as { mid?: unknown; songmid?: unknown; id?: unknown; songid?: unknown };
+  const id = raw.mid ?? raw.songmid ?? raw.id ?? raw.songid;
+  const lyricId = typeof id === 'string' || (typeof id === 'number' && Number.isSafeInteger(id)) ? String(id) : '';
   return {
     title: row.name ?? row.songname!,
     artist: row.singer.map((singer) => singer.name).join(' / '),
-    ...(language ? { language } : {})
+    ...(/^(?:[A-Za-z0-9]{14}|[1-9]\d{0,15})$/.test(lyricId) ? { lyricId } : {}),
+    ...(language ? { language, languageSource: 'metadata' as const } : {})
   };
 };
 const qqPlaylist = z.object({

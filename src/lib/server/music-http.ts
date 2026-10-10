@@ -3,7 +3,14 @@ import type { MusicProvider } from '$lib/music-import';
 
 const hosts = {
   netease: new Set(['music.163.com', 'y.music.163.com', '163cn.tv']),
-  kugou: new Set(['m.kugou.com', 'www.kugou.com', 'wwwapi.kugou.com', 't1.kugou.com', 't.kugou.com']),
+  kugou: new Set([
+    'm.kugou.com',
+    'www.kugou.com',
+    'wwwapi.kugou.com',
+    't1.kugou.com',
+    't.kugou.com',
+    'lyrics.kugou.com'
+  ]),
   qqmusic: new Set(['c6.y.qq.com', 'c.y.qq.com', 'y.qq.com', 'i.y.qq.com', 'i2.y.qq.com'])
 };
 const maxBytes = 4 * 1024 * 1024;

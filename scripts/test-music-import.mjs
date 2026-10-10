@@ -34,6 +34,71 @@ try {
     await server.ssrLoadModule('/src/lib/server/music-import.ts');
   const { musicUrl, readMusicUrl } = await server.ssrLoadModule('/src/lib/server/music-http.ts');
   const { markImportDuplicates } = await server.ssrLoadModule('/src/lib/import-duplicates.ts');
+  const { fetchMusicLanguageBatch, validLyricId } = await server.ssrLoadModule('/src/lib/server/music-language.ts');
+  await test('QQ MID and Kugou hash survive song and playlist parsing; invalid IDs are not forwarded', async () => {
+    const hash = '0123456789abcdef0123456789abcdef';
+    assert.equal(
+      parseKugouTracks(
+        'var dataFromSmarty=' + JSON.stringify([{ song_name: 'This game', author_name: 'Singer', hash }]) + ';'
+      )[0].lyricId,
+      hash.toUpperCase()
+    );
+    mock(reply(JSON.stringify({ code: 0, data: [{ ...track('Butter-Fly'), songmid: '0039MnYb0qxYhV' }] })));
+    assert.equal((await fetchMusicTracks('qqmusic', '123', 'song'))[0].lyricId, '0039MnYb0qxYhV');
+    mock(
+      reply(
+        JSON.stringify({ code: 0, cdlist: [{ songnum: 1, songlist: [{ ...track('Song'), mid: '0039MnYb0qxYhV' }] }] })
+      )
+    );
+    assert.equal((await fetchMusicTracks('qqmusic', '123', 'playlist'))[0].lyricId, '0039MnYb0qxYhV');
+    assert.equal(validLyricId('kugou', 'https://evil.test'), false);
+    assert.equal(validLyricId('qqmusic', '123&other=1'), false);
+    await assert.rejects(() => fetchMusicLanguageBatch('kugou', ['bad']), /有效歌曲/);
+    await assert.rejects(() => fetchMusicLanguageBatch('qqmusic', Array(13).fill('123')), /12/);
+  });
+  await test('QQ original lyrics override title, ignore translations, decode entities and cache by platform', async () => {
+    const original =
+      '[00:12]You are the one I love and you are in my heart\n[00:20]I don&#39;t know the way but you are with me';
+    mock(
+      reply(
+        JSON.stringify({
+          code: 0,
+          lyric: Buffer.from(original).toString('base64'),
+          trans: Buffer.from('きらめく夢を追いかけてどこまでも飛んでゆこう').toString('base64')
+        })
+      )
+    );
+    assert.deepEqual(await fetchMusicLanguageBatch('qqmusic', ['991111']), [{ id: '991111', language: '英语' }]);
+    assert.equal(new URL(calls[0]).searchParams.get('musicid'), '991111');
+    assert.equal((await fetchMusicLanguageBatch('qqmusic', ['991111', '991111'])).length, 1);
+    assert.equal(calls.length, 1);
+    mock(reply(JSON.stringify({ code: 0, lyric: '', trans: Buffer.from(original).toString('base64') })));
+    assert.equal((await fetchMusicLanguageBatch('qqmusic', ['0039MnYb0qxYhV']))[0].language, undefined);
+    assert.equal(new URL(calls[0]).searchParams.get('songmid'), '0039MnYb0qxYhV');
+    mock(reply('{}', 403));
+    assert.equal((await fetchMusicLanguageBatch('qqmusic', ['991112']))[0].language, undefined);
+  });
+  await test('Kugou uses exact song hash and original LRC, tolerates missing lyrics and rejects unsafe download IDs', async () => {
+    const hash = 'A'.repeat(32);
+    mock(
+      reply(JSON.stringify({ status: 200, candidates: [{ id: '777', accesskey: 'ABC123' }] })),
+      reply(
+        JSON.stringify({
+          status: 200,
+          content: Buffer.from('きらめく夢を追いかけてどこまでも飛んでゆこう').toString('base64')
+        })
+      )
+    );
+    assert.deepEqual(await fetchMusicLanguageBatch('kugou', [hash]), [{ id: hash, language: '日语' }]);
+    assert.equal(new URL(calls[0]).searchParams.get('hash'), hash);
+    assert.equal(new URL(calls[0]).searchParams.has('keyword'), false);
+    assert.equal(new URL(calls[1]).searchParams.get('fmt'), 'lrc');
+    mock(reply(JSON.stringify({ status: 200, candidates: [{ id: '777', accesskey: 'https://evil.test' }] })));
+    assert.equal((await fetchMusicLanguageBatch('kugou', ['B'.repeat(32)]))[0].language, undefined);
+    assert.equal(calls.length, 1);
+    mock(reply(JSON.stringify({ status: 200, candidates: [] })));
+    assert.equal((await fetchMusicLanguageBatch('kugou', ['C'.repeat(32)]))[0].language, undefined);
+  });
   await test('duplicate detection covers existing and batch songs across providers without merging versions or artists', () => {
     const existing = [
       { title: 'Butter-Fly', artist: '和田光司' },

@@ -65,14 +65,11 @@
     const list = untrack(() => rows);
     completed = 0;
     identificationError = '';
-    const candidates =
-      (preview.provider ?? 'netease') === 'netease'
-        ? untrack(() =>
-            list.filter(
-              (song) => song.neteaseId && song.languageSource !== 'lyrics' && song.languageSource !== 'metadata'
-            )
-          )
-        : [];
+    const provider = preview.provider ?? 'netease';
+    const lyricId = (song: PreviewRow) => (provider === 'netease' ? song.neteaseId : song.lyricId);
+    const candidates = untrack(() =>
+      list.filter((song) => lyricId(song) && song.languageSource !== 'lyrics' && song.languageSource !== 'metadata')
+    );
     total = candidates.length;
     const abort = new AbortController();
     controller = abort;
@@ -82,7 +79,8 @@
         for (let i = 0; i < candidates.length && !abort.signal.aborted; i += 12) {
           const batch = candidates.slice(i, i + 12);
           const body = new FormData();
-          body.set('ids', JSON.stringify(batch.map((song) => song.neteaseId)));
+          body.set('provider', provider);
+          body.set('ids', JSON.stringify(batch.map(lyricId)));
           const response = await fetch('?/identifyLanguages', {
             method: 'POST',
             body,
@@ -95,7 +93,7 @@
           for (const item of result.data.languageResults as Array<{ id: string; language?: string }>) {
             if (!item.language) continue;
             for (const song of list) {
-              if (song.neteaseId === item.id && !song.manual) {
+              if (lyricId(song) === item.id && !song.manual) {
                 song.language = item.language;
                 song.languageSource = 'lyrics';
               }
