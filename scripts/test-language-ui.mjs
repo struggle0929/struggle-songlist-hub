@@ -37,6 +37,7 @@ try {
   await page.waitForURL('**/s/siro0/admin');
   await page.waitForLoadState('networkidle');
   let generation = 0;
+  let customPreview;
   await page.route('**/*', async (route) => {
     if (!route.request().url().includes('?/previewMusic')) return route.continue();
     const mixed = generation === 2;
@@ -59,6 +60,7 @@ try {
         }))
       }
     };
+    if (customPreview) data.importPreview = customPreview;
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ type: 'success', status: 200, data: stringify(data) })
@@ -128,6 +130,60 @@ try {
   console.log(
     'PASS total progress, unresolved-first ordering, preserved row edits and visible footer across viewport sizes'
   );
+  for (const provider of ['netease', 'kugou', 'qqmusic']) {
+    const normal = {
+      title: `Dedup ${provider}`,
+      artist: 'Artist',
+      language: '中文',
+      languageSource: 'metadata',
+      tagsInput: ''
+    };
+    customPreview = {
+      provider,
+      sourceKind: 'playlist',
+      sourceInput: 'fixture',
+      status: 'ready',
+      songs: [
+        normal,
+        { ...normal, title: `Review ${provider}`, language: '其他', languageSource: 'unknown' },
+        { ...normal, title: 'Language UI 996000' },
+        { ...normal },
+        { ...normal, title: `Language UI 996000 (Live ${provider})` },
+        { ...normal, title: 'Language UI 996000', artist: `Cover ${provider}` }
+      ]
+    };
+    await openPreview();
+    await dialog.getByText('歌词检查：6/6；待核对：1；重复：2（默认不勾选）', { exact: true }).waitFor();
+    const tableRows = dialog.locator('tbody tr');
+    assert.ok(await tableRows.nth(0).getByText('重复：歌单中已有', { exact: true }).isVisible());
+    assert.ok(await tableRows.nth(1).getByText('重复：本次列表中已有', { exact: true }).isVisible());
+    assert.ok(await tableRows.nth(2).getByText(`Review ${provider}`, { exact: true }).isVisible());
+    assert.equal(await tableRows.nth(0).locator('[name=selectedSong]').isChecked(), false);
+    assert.equal(await tableRows.nth(1).locator('[name=selectedSong]').isChecked(), false);
+    assert.equal(await tableRows.nth(2).locator('[name=selectedSong]').isChecked(), true);
+    await tableRows.nth(2).locator('[name=songTagsInput]').fill('流行');
+    await dialog.getByRole('button', { name: '导入勾选歌曲' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    const imported = (await backend.db.query('select title,tags from songs where title=$1', [normal.title])).rows;
+    assert.equal(imported.length, 1);
+    const reviewed = (await backend.db.query('select tags from songs where title=$1', [`Review ${provider}`])).rows;
+    assert.deepEqual(reviewed[0].tags, ['流行']);
+    // Reopening the same import now finds every row already present, including hidden/versioned songs.
+    await openPreview();
+    await dialog.getByText('歌词检查：6/6；待核对：1；重复：6（默认不勾选）', { exact: true }).waitFor();
+    assert.equal(await dialog.getByRole('button', { name: '导入勾选歌曲' }).isEnabled(), false);
+    await dialog.locator('tbody tr').first().locator('[name=selectedSong]').check();
+    assert.equal(await dialog.getByRole('button', { name: '导入勾选歌曲' }).isEnabled(), true);
+    await dialog.getByRole('button', { name: '导入勾选歌曲' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    assert.equal(
+      (await backend.db.query('select count(*)::int as count from songs where title=$1', [normal.title])).rows[0].count,
+      2
+    );
+    console.log(
+      `PASS ${provider} duplicates default unchecked, precede review rows, preserve versions and allow explicit reselection`
+    );
+  }
   assert.deepEqual(errors, []);
   console.log('PASS cancellation keeps manual import available and closing the modal has no runtime errors');
 } finally {

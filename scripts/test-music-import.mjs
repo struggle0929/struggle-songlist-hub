@@ -33,6 +33,29 @@ try {
   const { fetchMusicTracks, parseKugouTracks, detectMusicLink, extractMusicLink, fetchSharedMusic } =
     await server.ssrLoadModule('/src/lib/server/music-import.ts');
   const { musicUrl, readMusicUrl } = await server.ssrLoadModule('/src/lib/server/music-http.ts');
+  const { markImportDuplicates } = await server.ssrLoadModule('/src/lib/import-duplicates.ts');
+  await test('duplicate detection covers existing and batch songs across providers without merging versions or artists', () => {
+    const existing = [
+      { title: 'Butter-Fly', artist: '和田光司' },
+      { title: 'Song', artist: 'A / B' }
+    ];
+    for (const provider of ['netease', 'kugou', 'qqmusic']) {
+      const input = [
+        { title: ' ＢＵＴＴＥＲ-ＦＬＹ ', artist: ' 和田光司 ', provider },
+        { title: 'song', artist: 'A、B', provider },
+        { title: 'Butter-Fly (Live)', artist: '和田光司', provider },
+        { title: 'Butter-Fly', artist: '翻唱歌手', provider },
+        { title: 'New Song', artist: 'Singer', provider },
+        { title: ' new   song ', artist: 'singer', provider }
+      ];
+      assert.deepEqual(
+        markImportDuplicates(input, existing).map((song) => song.duplicateReason),
+        ['existing', 'existing', undefined, undefined, undefined, 'batch']
+      );
+      assert.ok(input.every((song) => !('duplicateReason' in song)));
+      assert.equal(markImportDuplicates([input[0]], []).at(0).duplicateReason, undefined);
+    }
+  });
   const { playlistImportFormValuesSchema, playlistImportPayloadSchema } = await server.ssrLoadModule(
     '/src/lib/server/form-schemas.ts'
   );

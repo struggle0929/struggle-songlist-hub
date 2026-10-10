@@ -103,6 +103,7 @@
   {#if hasImportPreview(form) && !importModalDismissed}
     <NeteaseImportModal
       preview={form.importPreview}
+      existingSongs={data.dashboard.songs}
       {tags}
       adminError={importError}
       onClose={() => (importModalDismissed = true)}

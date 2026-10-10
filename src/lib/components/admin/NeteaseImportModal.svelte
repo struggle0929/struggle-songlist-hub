@@ -9,39 +9,59 @@
   import { Dialog } from 'bits-ui';
   import { musicProviderLabel } from '$lib/music-import';
   import TagInput from './TagInput.svelte';
+  import { markImportDuplicates, type DuplicateReason } from '$lib/import-duplicates';
 
   let {
     preview,
     adminError,
     onClose,
-    tags = []
+    tags = [],
+    existingSongs = []
   }: {
     preview: ImportPreview;
     adminError?: string;
     onClose: () => void;
     tags?: string[];
+    existingSongs?: Array<{ title: string; artist: string }>;
   } = $props();
 
   const submit = createLocalPending();
-  type PreviewRow = ImportPreview['songs'][number] & { manual: boolean; selected: boolean };
+  type PreviewRow = ImportPreview['songs'][number] & {
+    manual: boolean;
+    selected: boolean;
+    duplicateReason?: DuplicateReason;
+  };
   let rows = $state<PreviewRow[]>([]);
   let identifying = $state(false);
   let completed = $state(0);
   let total = $state(0);
   let identificationError = $state('');
   function needsReview(song: PreviewRow) {
-    return !song.manual && (!song.languageSource || song.languageSource === 'unknown');
+    return !song.manual && (song.language === '其他' || song.languageSource === 'unknown');
   }
   const reviewCount = $derived(rows.filter(needsReview).length);
   const checkedCount = $derived(preview.songs.length - total + completed);
-  // Keep rows still while requests are running; move unresolved songs first when checking finishes.
-  const displayedRows = $derived(
-    identifying ? rows : [...rows.filter(needsReview), ...rows.filter((song) => !needsReview(song))]
-  );
+  const duplicateCount = $derived(rows.filter((song) => song.duplicateReason).length);
+  const selectedCount = $derived(rows.filter((song) => song.selected).length);
+  // Stable groups preserve source order. Avoid moving nonduplicate rows during lyric checks.
+  const displayedRows = $derived.by(() => {
+    const duplicates = rows.filter((song) => song.duplicateReason);
+    const remaining = rows.filter((song) => !song.duplicateReason);
+    return identifying
+      ? [...duplicates, ...remaining]
+      : [...duplicates, ...remaining.filter(needsReview), ...remaining.filter((song) => !needsReview(song))];
+  });
   let controller: AbortController | undefined;
   let songList: HTMLDivElement | undefined;
   $effect(() => {
-    rows = preview.songs.map((song) => ({ ...song, manual: false, selected: true }));
+    rows = markImportDuplicates(
+      preview.songs,
+      untrack(() => existingSongs)
+    ).map((song) => ({
+      ...song,
+      manual: false,
+      selected: !song.duplicateReason
+    }));
     const list = untrack(() => rows);
     completed = 0;
     identificationError = '';
@@ -152,7 +172,10 @@
         <div
           class="shrink-0 rounded-[18px] border border-[var(--color-accent-surface-border)] bg-[var(--color-accent-surface-bg)] px-4 py-3 text-sm text-[var(--color-text-secondary)]"
         >
-          <p aria-live="polite">歌词检查：{checkedCount}/{preview.songs.length}；待核对：{reviewCount}</p>
+          <p aria-live="polite">
+            歌词检查：{checkedCount}/{preview.songs
+              .length}；待核对：{reviewCount}{#if duplicateCount > 0}；重复：{duplicateCount}（默认不勾选）{/if}
+          </p>
           {#if identifying}
             <button type="button" class="mt-2 text-xs underline" onclick={stopIdentification}>停止识别，手动核对</button
             >
@@ -193,7 +216,14 @@
                     <input type="hidden" name="songTitle" value={song.title} />
                     <input type="hidden" name="songArtist" value={song.artist} />
                   </td>
-                  <td class="px-3 py-3 text-[var(--color-text)]">{song.title}</td>
+                  <td class="px-3 py-3 text-[var(--color-text)]">
+                    {song.title}
+                    {#if song.duplicateReason}
+                      <p class="mt-1 text-xs text-[var(--color-text-muted)]">
+                        {song.duplicateReason === 'existing' ? '重复：歌单中已有' : '重复：本次列表中已有'}
+                      </p>
+                    {/if}
+                  </td>
                   <td class="px-3 py-3 text-[var(--color-text-secondary)]">{song.artist}</td>
                   <td class="px-3 py-3">
                     <Select
@@ -216,7 +246,7 @@
                           ? '歌词识别'
                           : song.languageSource === 'metadata'
                             ? '平台信息'
-                            : song.languageSource === 'title'
+                            : song.languageSource === 'title' || (!song.languageSource && song.language !== '其他')
                               ? '歌名推测'
                               : '待核对'}
                     </p>
@@ -238,7 +268,7 @@
         <button
           type="submit"
           class="button button-primary button-full shrink-0"
-          disabled={submit.pending || identifying}
+          disabled={submit.pending || identifying || selectedCount === 0}
           data-pending={submit.pending || undefined}
         >
           导入勾选歌曲
