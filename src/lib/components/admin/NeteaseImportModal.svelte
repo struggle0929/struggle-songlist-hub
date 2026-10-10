@@ -29,6 +29,9 @@
   let completed = $state(0);
   let total = $state(0);
   let identificationError = $state('');
+  const initiallyIdentified = $derived(
+    preview.songs.filter((song) => song.languageSource === 'lyrics' || song.languageSource === 'metadata').length
+  );
   let controller: AbortController | undefined;
   $effect(() => {
     rows = preview.songs.map((song) => ({ ...song, manual: false }));
@@ -133,7 +136,10 @@
           <p class="mt-1 text-xs">混合语言歌曲按主要演唱语言判断。“待核对”表示依据不足，手动修改不会被自动识别覆盖。</p>
           {#if total > 0}
             <p class="mt-2 text-xs" aria-live="polite">
-              {identifying ? '正在补充歌词识别' : '歌词识别进度'}：{completed}/{total}
+              {identifying ? '正在补充歌词检查' : '补充歌词检查'}：{completed}/{total}（歌单共 {preview.songs.length} 首）
+            </p>
+            <p class="mt-1 text-xs">
+              初次解析已识别 {initiallyIdentified} 首，不计入本轮补充检查；检查完成后，“待核对”的歌曲仍需确认。
             </p>
           {/if}
           {#if identifying}
@@ -205,7 +211,7 @@
                       name="songTagsInput"
                       class="form-field-muted min-w-48"
                       value={song.tagsInput}
-                      placeholder={`例如：${musicProviderLabel(preview.provider)}导入`}
+                      placeholder="例如：流行"
                     />
                   </td>
                 </tr>

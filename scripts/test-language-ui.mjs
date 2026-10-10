@@ -73,7 +73,7 @@ try {
   const first = dialog.locator('tbody tr').first();
   await first.locator('button.select-trigger').click();
   await page.getByRole('option', { name: '中文', exact: true }).click();
-  await dialog.getByText('歌词识别进度：14/14', { exact: true }).waitFor({ timeout: 15000 });
+  await dialog.getByText(/补充歌词检查：14\/14/).waitFor({ timeout: 15000 });
   assert.equal(await first.locator('[name=songLanguage]').inputValue(), '中文');
   assert.equal(await dialog.locator('tbody tr').last().locator('[name=songLanguage]').inputValue(), '日语');
   assert.ok(await first.getByText('手动选择', { exact: true }).isVisible());
