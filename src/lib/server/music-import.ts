@@ -5,6 +5,7 @@ import { musicUrl, readMusicUrl } from '$lib/server/music-http';
 import { fetchNeteasePlaylistSongs, fetchNeteaseSong } from '$lib/server/netease';
 import { explicitSongLanguage } from '$lib/language';
 import type { SongLanguage } from '$lib/types';
+import { fetchKugouPlaylist, kugouCollectionId } from './kugou-playlist';
 
 type Track = { title: string; artist: string; language?: SongLanguage; lyricId?: string; languageSource?: 'metadata' };
 
@@ -211,7 +212,10 @@ export async function fetchMusicTracks(
         throw new UserFacingError('请在歌单导入栏填写此链接。');
       if (kind === 'playlist' && !/zlist|songlist|special/.test(url.pathname))
         throw new UserFacingError('请填写酷狗公开歌单分享链接。');
-      songs = parseKugouTracks(text);
+      const collectionId = kind === 'playlist' ? kugouCollectionId(url) : undefined;
+      songs = collectionId ? await fetchKugouPlaylist(collectionId, maxSongs, signal) : parseKugouTracks(text);
+      if (kind === 'playlist' && !collectionId && [10, 100].includes(songs.length))
+        throw new UserFacingError('酷狗分享页可能只返回部分歌曲，请重新复制包含完整歌单编号的分享链接。');
       if (kind === 'song' && songs.length !== 1) throw new UserFacingError('请填写酷狗单曲分享链接。');
     }
     if (!songs.length) throw new UserFacingError('这个歌单没有可导入的歌曲。');

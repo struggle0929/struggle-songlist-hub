@@ -9,7 +9,8 @@ const hosts = {
     'wwwapi.kugou.com',
     't1.kugou.com',
     't.kugou.com',
-    'lyrics.kugou.com'
+    'lyrics.kugou.com',
+    'gateway.kugou.com'
   ]),
   qqmusic: new Set(['c6.y.qq.com', 'c.y.qq.com', 'y.qq.com', 'i.y.qq.com', 'i2.y.qq.com'])
 };

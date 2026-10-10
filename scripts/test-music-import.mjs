@@ -35,6 +35,70 @@ try {
   const { musicUrl, readMusicUrl } = await server.ssrLoadModule('/src/lib/server/music-http.ts');
   const { markImportDuplicates } = await server.ssrLoadModule('/src/lib/import-duplicates.ts');
   const { fetchMusicLanguageBatch, validLyricId } = await server.ssrLoadModule('/src/lib/server/music-language.ts');
+  const { fetchKugouPlaylist } = await server.ssrLoadModule('/src/lib/server/kugou-playlist.ts');
+  await test('Kugou truncated share preview is replaced by all paginated songs and keeps hashes and artists', async () => {
+    const gid = 'collection_3_1415373104_6_0';
+    const preview =
+      'var dataFromSmarty=' +
+      JSON.stringify(Array.from({ length: 10 }, (_, i) => ({ song_name: `Preview ${i}`, author_name: 'Artist' }))) +
+      ';';
+    const song = (i) => ({
+      name: `A、B - Song ${i}`,
+      singerinfo: [{ name: 'A' }, { name: 'B' }],
+      hash: String(i).padStart(32, '0'),
+      language: i === 126 ? '英语' : ''
+    });
+    const page = (begin, count, songs) =>
+      reply(JSON.stringify({ error_code: 0, data: { begin_idx: begin, count, songs, list_info: { is_pri: 0 } } }));
+    mock(
+      reply('', 302, { location: `https://wwwapi.kugou.com/share/zlist.html?global_collection_id=${gid}` }),
+      reply(preview),
+      page(
+        0,
+        127,
+        Array.from({ length: 100 }, (_, i) => song(i))
+      ),
+      page(
+        100,
+        127,
+        Array.from({ length: 27 }, (_, i) => song(i + 100))
+      )
+    );
+    const songs = await fetchMusicTracks('kugou', 'https://t1.kugou.com/fixture', 'playlist');
+    assert.equal(songs.length, 127);
+    assert.equal(songs[126].title, 'Song 126');
+    assert.equal(songs[126].artist, 'A / B');
+    assert.equal(songs[126].lyricId, String(126).padStart(32, '0'));
+    assert.equal(songs[126].languageSource, 'metadata');
+    assert.equal(new URL(calls[2]).searchParams.get('global_collection_id'), gid);
+    assert.equal(new URL(calls[3]).searchParams.get('begin_idx'), '100');
+    mock(reply(preview));
+    await assert.rejects(
+      () => fetchMusicTracks('kugou', 'https://wwwapi.kugou.com/share/zlist.html', 'playlist'),
+      /部分歌曲/
+    );
+  });
+  await test('Kugou refuses missing pages, changing totals, private lists, over-limit counts and invalid collection IDs', async () => {
+    const gid = 'collection_3_1415373104_6_0';
+    const row = { name: 'A - Song', singerinfo: [{ name: 'A' }] };
+    const page = (begin, count, songs, privateList = 0) =>
+      reply(
+        JSON.stringify({ error_code: 0, data: { begin_idx: begin, count, songs, list_info: { is_pri: privateList } } })
+      );
+    mock(page(0, 2, [row]), page(1, 2, []));
+    await assert.rejects(() => fetchKugouPlaylist(gid, 5000, AbortSignal.timeout(1000)), /完整歌单/);
+    mock(page(0, 2, [row]), page(0, 2, [row]));
+    await assert.rejects(() => fetchKugouPlaylist(gid, 5000, AbortSignal.timeout(1000)), /完整歌单/);
+    mock(page(0, 2, [row]), page(1, 3, [{ ...row, name: 'A - Other' }]));
+    await assert.rejects(() => fetchKugouPlaylist(gid, 5000, AbortSignal.timeout(1000)), /发生变化/);
+    mock(page(0, 5001, [row]));
+    await assert.rejects(() => fetchKugouPlaylist(gid, 5000, AbortSignal.timeout(1000)), /最多导入/);
+    mock(page(0, 1, [row], 1));
+    await assert.rejects(() => fetchKugouPlaylist(gid, 5000, AbortSignal.timeout(1000)), /完整歌单/);
+    mock();
+    await assert.rejects(() => fetchKugouPlaylist('https://evil.test', 5000, AbortSignal.timeout(1000)), /编号无效/);
+    assert.equal(calls.length, 0);
+  });
   await test('QQ MID and Kugou hash survive song and playlist parsing; invalid IDs are not forwarded', async () => {
     const hash = '0123456789abcdef0123456789abcdef';
     assert.equal(
