@@ -23,8 +23,9 @@ const originalLyric = api.lyric;
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const errors = [];
 try {
-  api.lyric = async () => {
+  api.lyric = async ({ id }) => {
     await new Promise((resolve) => setTimeout(resolve, 400));
+    if (String(id) === '996216') return { body: { code: 200 } };
     return { body: { code: 200, lrc: { lyric: 'きらめく夢を追いかけてどこまでも飛んでゆこう' } } };
   };
   const page = await browser.newPage();
@@ -38,6 +39,7 @@ try {
   let generation = 0;
   await page.route('**/*', async (route) => {
     if (!route.request().url().includes('?/previewMusic')) return route.continue();
+    const mixed = generation === 2;
     const start = 996000 + generation++ * 100;
     const data = {
       kind: 'preview-ready',
@@ -47,11 +49,11 @@ try {
         sourceKind: 'playlist',
         sourceInput: 'https://music.163.com/playlist?id=1',
         status: 'ready',
-        songs: Array.from({ length: 14 }, (_, i) => ({
+        songs: Array.from({ length: mixed ? 17 : 14 }, (_, i) => ({
           title: `Language UI ${start + i}`,
           artist: 'Artist',
-          language: '其他',
-          languageSource: 'unknown',
+          language: mixed && i < 2 ? '中文' : '其他',
+          languageSource: mixed && i < 2 ? 'lyrics' : 'unknown',
           neteaseId: String(start + i),
           tagsInput: ''
         }))
@@ -73,7 +75,7 @@ try {
   const first = dialog.locator('tbody tr').first();
   await first.locator('button.select-trigger').click();
   await page.getByRole('option', { name: '中文', exact: true }).click();
-  await dialog.getByText(/补充歌词检查：14\/14/).waitFor({ timeout: 15000 });
+  await dialog.getByText('歌词检查：14/14；待核对：0', { exact: true }).waitFor({ timeout: 15000 });
   assert.equal(await first.locator('[name=songLanguage]').inputValue(), '中文');
   assert.equal(await dialog.locator('tbody tr').last().locator('[name=songLanguage]').inputValue(), '日语');
   assert.ok(await first.getByText('手动选择', { exact: true }).isVisible());
@@ -91,6 +93,41 @@ try {
   assert.equal(await dialog.getByRole('button', { name: '导入勾选歌曲' }).isEnabled(), true);
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
+  await openPreview();
+  const unresolved = dialog.locator('tbody tr').filter({ hasText: 'Language UI 996216' });
+  await unresolved.locator('[name=songTagsInput]').fill('流行');
+  await unresolved.locator('[name=selectedSong]').uncheck();
+  await dialog.getByText('歌词检查：17/17；待核对：1', { exact: true }).waitFor({ timeout: 15000 });
+  assert.equal(await dialog.locator('[data-song-list]').evaluate((node) => node.scrollTop), 0);
+  assert.ok(await dialog.locator('tbody tr').first().getByText('Language UI 996216', { exact: true }).isVisible());
+  assert.equal(await unresolved.locator('[name=songTagsInput]').inputValue(), '流行');
+  assert.equal(await unresolved.locator('[name=selectedSong]').isChecked(), false);
+  for (const viewport of [
+    { width: 1920, height: 948 },
+    { width: 1366, height: 768 },
+    { width: 1280, height: 600 },
+    { width: 390, height: 844 }
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(100);
+    const button = await dialog.getByRole('button', { name: '导入勾选歌曲' }).boundingBox();
+    assert.ok(button && button.y >= 0 && button.y + button.height <= viewport.height, JSON.stringify(viewport));
+    assert.ok(await dialog.evaluate((node) => node.scrollHeight <= node.clientHeight + 1));
+  }
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.screenshot({ path: `${process.env.TEMP}/songlist-import-layout.png` });
+  await unresolved.locator('button.select-trigger').click();
+  await page.getByRole('option', { name: '英语', exact: true }).click();
+  await dialog.getByText('歌词检查：17/17；待核对：0', { exact: true }).waitFor();
+  assert.equal(await unresolved.locator('[name=selectedSong]').isChecked(), false);
+  await dialog.getByRole('button', { name: '导入勾选歌曲' }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  const mixedSaved = (await backend.db.query("select title from songs where title like 'Language UI 9962%'")).rows;
+  assert.equal(mixedSaved.length, 16);
+  assert.ok(mixedSaved.every((song) => song.title !== 'Language UI 996216'));
+  console.log(
+    'PASS total progress, unresolved-first ordering, preserved row edits and visible footer across viewport sizes'
+  );
   assert.deepEqual(errors, []);
   console.log('PASS cancellation keeps manual import available and closing the modal has no runtime errors');
 } finally {

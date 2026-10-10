@@ -1,6 +1,6 @@
 <script lang="ts">
   import { enhance, deserialize } from '$app/forms';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { createLocalPending } from '$lib/pending.svelte';
   import Icon from '$lib/components/ui/Icon.svelte';
   import Select from '$lib/components/ui/Select.svelte';
@@ -23,18 +23,25 @@
   } = $props();
 
   const submit = createLocalPending();
-  type PreviewRow = ImportPreview['songs'][number] & { manual: boolean };
+  type PreviewRow = ImportPreview['songs'][number] & { manual: boolean; selected: boolean };
   let rows = $state<PreviewRow[]>([]);
   let identifying = $state(false);
   let completed = $state(0);
   let total = $state(0);
   let identificationError = $state('');
-  const initiallyIdentified = $derived(
-    preview.songs.filter((song) => song.languageSource === 'lyrics' || song.languageSource === 'metadata').length
+  function needsReview(song: PreviewRow) {
+    return !song.manual && (!song.languageSource || song.languageSource === 'unknown');
+  }
+  const reviewCount = $derived(rows.filter(needsReview).length);
+  const checkedCount = $derived(preview.songs.length - total + completed);
+  // Keep rows still while requests are running; move unresolved songs first when checking finishes.
+  const displayedRows = $derived(
+    identifying ? rows : [...rows.filter(needsReview), ...rows.filter((song) => !needsReview(song))]
   );
   let controller: AbortController | undefined;
+  let songList: HTMLDivElement | undefined;
   $effect(() => {
-    rows = preview.songs.map((song) => ({ ...song, manual: false }));
+    rows = preview.songs.map((song) => ({ ...song, manual: false, selected: true }));
     const list = untrack(() => rows);
     completed = 0;
     identificationError = '';
@@ -80,14 +87,20 @@
         if (!abort.signal.aborted)
           identificationError = error instanceof Error ? error.message : '歌词识别暂时不可用。';
       } finally {
-        if (!abort.signal.aborted) identifying = false;
+        if (!abort.signal.aborted) {
+          identifying = false;
+          await tick();
+          if (songList) songList.scrollTop = 0;
+        }
       }
     })();
     return () => abort.abort();
   });
-  function stopIdentification() {
+  async function stopIdentification() {
     controller?.abort();
     identifying = false;
+    await tick();
+    if (songList) songList.scrollTop = 0;
   }
 </script>
 
@@ -99,7 +112,7 @@
 >
   <Dialog.Portal>
     <Dialog.Overlay class="dialog-overlay" />
-    <Dialog.Content class="dialog-content dialog-content-lg">
+    <Dialog.Content class="dialog-content dialog-content-lg import-preview-dialog">
       <div class="dialog-header">
         <div>
           <Dialog.Title class="dialog-title">{musicProviderLabel(preview.provider)}歌单导入</Dialog.Title>
@@ -114,34 +127,32 @@
         <div class="alert alert-danger mb-5">{adminError}</div>
       {/if}
 
-      <form method="POST" action="?/importPlaylist" class="space-y-5" use:enhance={submit.enhance}>
+      <form
+        method="POST"
+        action="?/importPlaylist"
+        class="flex min-h-0 flex-1 flex-col gap-4"
+        use:enhance={submit.enhance}
+      >
         <input type="hidden" name="sourceInput" value={preview.sourceInput} />
         <input type="hidden" name="provider" value={preview.provider ?? 'netease'} />
-        <TagInput
-          name="sharedTagsInput"
-          suggestions={tags}
-          value={preview.sharedTagsInput ?? ''}
-          label="统一追加标签"
-        />
+        <div class="grid shrink-0 gap-4 sm:grid-cols-2">
+          <TagInput
+            name="sharedTagsInput"
+            suggestions={tags}
+            value={preview.sharedTagsInput ?? ''}
+            label="统一追加标签"
+          />
 
-        <label class="field-label">
-          <span>状态</span>
-          <Select name="status" value={preview.status} items={songStatusItems} />
-        </label>
+          <label class="field-label">
+            <span>状态</span>
+            <Select name="status" value={preview.status} items={songStatusItems} />
+          </label>
+        </div>
 
         <div
-          class="rounded-[18px] border border-[var(--color-accent-surface-border)] bg-[var(--color-accent-surface-bg)] px-4 py-3 text-sm text-[var(--color-text-secondary)]"
+          class="shrink-0 rounded-[18px] border border-[var(--color-accent-surface-border)] bg-[var(--color-accent-surface-bg)] px-4 py-3 text-sm text-[var(--color-text-secondary)]"
         >
-          <p class="font-medium text-[var(--color-text)]">{preview.songs.length} 首待确认</p>
-          <p class="mt-1 text-xs">混合语言歌曲按主要演唱语言判断。“待核对”表示依据不足，手动修改不会被自动识别覆盖。</p>
-          {#if total > 0}
-            <p class="mt-2 text-xs" aria-live="polite">
-              {identifying ? '正在补充歌词检查' : '补充歌词检查'}：{completed}/{total}（歌单共 {preview.songs.length} 首）
-            </p>
-            <p class="mt-1 text-xs">
-              初次解析已识别 {initiallyIdentified} 首，不计入本轮补充检查；检查完成后，“待核对”的歌曲仍需确认。
-            </p>
-          {/if}
+          <p aria-live="polite">歌词检查：{checkedCount}/{preview.songs.length}；待核对：{reviewCount}</p>
           {#if identifying}
             <button type="button" class="mt-2 text-xs underline" onclick={stopIdentification}>停止识别，手动核对</button
             >
@@ -149,7 +160,11 @@
           {#if identificationError}<p class="mt-2 text-xs">{identificationError}</p>{/if}
         </div>
 
-        <div class="max-h-[56vh] overflow-auto rounded-[18px] border border-[var(--color-border-soft)]">
+        <div
+          class="min-h-0 flex-1 overflow-auto rounded-[18px] border border-[var(--color-border-soft)]"
+          data-song-list
+          bind:this={songList}
+        >
           <table class="w-full min-w-[760px] text-left text-sm">
             <thead
               class="sticky top-0 bg-[var(--color-surface)] text-xs tracking-[0.12em] text-[var(--color-text-muted)] uppercase"
@@ -163,7 +178,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-[var(--color-border-soft)] bg-[var(--color-surface)]">
-              {#each rows as song, index}
+              {#each displayedRows as song, index (song)}
                 <tr>
                   <td class="px-3 py-3 align-middle">
                     <div class="flex justify-center">
@@ -172,7 +187,7 @@
                         type="checkbox"
                         value={index}
                         class="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
-                        checked
+                        bind:checked={song.selected}
                       />
                     </div>
                     <input type="hidden" name="songTitle" value={song.title} />
@@ -210,7 +225,7 @@
                     <input
                       name="songTagsInput"
                       class="form-field-muted min-w-48"
-                      value={song.tagsInput}
+                      bind:value={song.tagsInput}
                       placeholder="例如：流行"
                     />
                   </td>
@@ -222,7 +237,7 @@
 
         <button
           type="submit"
-          class="button button-primary button-full"
+          class="button button-primary button-full shrink-0"
           disabled={submit.pending || identifying}
           data-pending={submit.pending || undefined}
         >
