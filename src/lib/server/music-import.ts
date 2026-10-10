@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { musicProviderLabel, type MusicProvider } from '$lib/music-import';
 import { UserFacingError } from '$lib/server/errors';
-import { musicUrl, readMusicUrl } from '$lib/server/music-http';
+import { musicUrl, readMusicUrl, resolveMusicShare } from '$lib/server/music-http';
 import { fetchNeteasePlaylistSongs, fetchNeteaseSong } from '$lib/server/netease';
 import { explicitSongLanguage } from '$lib/language';
 import type { SongLanguage } from '$lib/types';
@@ -40,7 +40,9 @@ export function detectMusicLink(value: string): { provider: MusicProvider; kind?
           : /\/song\.html|\/share\/[^/]+\.html/i.test(path)
             ? 'song'
             : undefined
-        : /\/playlist\/|[?&]disstid=/i.test(url.href)
+        : /\/playlist\/|[?&]disstid=/i.test(url.href) ||
+            (/\/n2\/m\/share\/details\/taoge\.html$/i.test(url.pathname) &&
+              /^\d+$/.test(url.searchParams.get('id') ?? ''))
           ? 'playlist'
           : /\/(?:songDetail|song)\/|[?&]song(?:mid|id)=/i.test(url.href)
             ? 'song'
@@ -53,14 +55,7 @@ export async function fetchSharedMusic(input: string, maxSongs = 5000) {
   let detected = detectMusicLink(link);
   if (!detected.kind) {
     try {
-      link = (
-        await readMusicUrl(
-          link,
-          detected.provider,
-          AbortSignal.timeout(30000),
-          (url) => !!detectMusicLink(url.href).kind
-        )
-      ).url.href;
+      link = (await resolveMusicShare(link, detected.provider, (url) => !!detectMusicLink(url.href).kind)).url.href;
       detected = detectMusicLink(link);
     } catch (error) {
       if (error instanceof UserFacingError) throw error;

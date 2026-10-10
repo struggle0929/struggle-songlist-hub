@@ -32,7 +32,60 @@ async function test(name, run) {
 try {
   const { fetchMusicTracks, parseKugouTracks, detectMusicLink, extractMusicLink, fetchSharedMusic } =
     await server.ssrLoadModule('/src/lib/server/music-import.ts');
-  const { musicUrl, readMusicUrl } = await server.ssrLoadModule('/src/lib/server/music-http.ts');
+  const { musicUrl, readMusicUrl, resolveMusicShare } = await server.ssrLoadModule('/src/lib/server/music-http.ts');
+  await test('official short-link aliases resolve mobile QQ playlists and fall back without duplicate retries', async () => {
+    const short = 'https://c6.y.qq.com/base/fcgi-bin/u?__=XpeQMp2GckbH';
+    mock(
+      reply('', 302, { location: 'https://i.y.qq.com/n2/m/share/details/taoge.html?id=8611139477&openinqqmusic=1' }),
+      reply(JSON.stringify({ code: 0, cdlist: [{ songnum: 1, songlist: [track('QQ song')] }] }))
+    );
+    const result = await fetchSharedMusic(short);
+    assert.equal(result.kind, 'playlist');
+    assert.equal(result.songs.length, 1);
+    assert.equal(new URL(calls[0]).hostname, 'c.y.qq.com');
+    assert.equal(new URL(calls[1]).searchParams.get('disstid'), '8611139477');
+    assert.equal(calls.length, 2); // Never fetch the target share HTML.
+    assert.equal(detectMusicLink('https://i.y.qq.com/n2/m/share/details/taoge.html?id=invalid').kind, undefined);
+
+    const seen = [];
+    globalThis.fetch = async (url, options) => {
+      seen.push(String(url));
+      assert.ok(options.signal);
+      if (seen.length === 1) throw new TypeError('fetch failed', { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } });
+      return reply('', 302, {
+        location: 'https://wwwapi.kugou.com/share/zlist.html?global_collection_id=collection_3_1415373104_5_0'
+      });
+    };
+    const resolved = await resolveMusicShare(
+      'https://t1.kugou.com/2D6aD33G6V2',
+      'kugou',
+      (url) => !!detectMusicLink(url.href).kind
+    );
+    assert.equal(resolved.url.searchParams.get('global_collection_id'), 'collection_3_1415373104_5_0');
+    assert.deepEqual(
+      seen.map((url) => new URL(url).hostname),
+      ['t.kugou.com', 't1.kugou.com']
+    );
+    seen.length = 0;
+    globalThis.fetch = async (url) => {
+      seen.push(String(url));
+      throw new TypeError('fetch failed', { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } });
+    };
+    await assert.rejects(
+      () => resolveMusicShare(short, 'qqmusic', (url) => !!detectMusicLink(url.href).kind),
+      /连接失败/
+    );
+    assert.equal(seen.length, 2);
+    mock(
+      reply('', 302, { location: 'https://evil.example/playlist/123' }),
+      reply('', 302, { location: 'https://evil.example/playlist/123' })
+    );
+    await assert.rejects(
+      () => resolveMusicShare(short, 'qqmusic', (url) => !!detectMusicLink(url.href).kind),
+      /官方分享链接/
+    );
+    assert.equal(calls.length, 2);
+  });
   await test('music-only transport retries once, reports safe network codes and never logs share tokens', async () => {
     let attempts = 0;
     globalThis.fetch = async (_url, options) => {

@@ -13,7 +13,7 @@ function connectionCode(error: unknown): string {
   if (item.errors?.length) return connectionCode(item.errors[0]);
   return item.name === 'TimeoutError' || item.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR';
 }
-async function requestMusic(url: URL, provider: MusicProvider, signal: AbortSignal) {
+async function requestMusic(url: URL, provider: MusicProvider, signal: AbortSignal, retry = true) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const options = {
@@ -30,6 +30,7 @@ async function requestMusic(url: URL, provider: MusicProvider, signal: AbortSign
       const code = connectionCode(error);
       if (
         !signal.aborted &&
+        retry &&
         attempt === 0 &&
         ['ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'ECONNRESET', 'EAI_AGAIN'].includes(code)
       )
@@ -58,6 +59,28 @@ const hosts = {
   qqmusic: new Set(['c6.y.qq.com', 'c.y.qq.com', 'y.qq.com', 'i.y.qq.com', 'i2.y.qq.com'])
 };
 const maxBytes = 4 * 1024 * 1024;
+// These official aliases accept the same share token as the app's short-link hosts.
+// Give each distinct endpoint a bounded attempt, rather than retrying a blocked host.
+export async function resolveMusicShare(value: string, provider: MusicProvider, stopAt: (url: URL) => boolean) {
+  const original = musicUrl(value, provider);
+  const alternate = new URL(original);
+  if (provider === 'kugou' && original.hostname === 't1.kugou.com') alternate.hostname = 't.kugou.com';
+  else if (provider === 'qqmusic' && original.hostname === 'c6.y.qq.com' && original.pathname === '/base/fcgi-bin/u')
+    alternate.hostname = 'c.y.qq.com';
+  else return readMusicUrl(original.href, provider, AbortSignal.timeout(30000), stopAt);
+
+  let lastError: unknown;
+  for (const candidate of [alternate, original]) {
+    try {
+      const result = await readMusicUrl(candidate.href, provider, AbortSignal.timeout(5000), stopAt, false);
+      if (stopAt(result.url)) return result;
+      lastError = new UserFacingError('无法识别单曲或歌单类型，请使用浏览器打开后的完整链接。');
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
 export function musicUrl(value: string, provider: MusicProvider) {
   let url: URL;
   try {
@@ -83,12 +106,13 @@ export async function readMusicUrl(
   value: string,
   provider: MusicProvider,
   signal: AbortSignal,
-  stopAt?: (url: URL) => boolean
+  stopAt?: (url: URL) => boolean,
+  retry = true
 ) {
   let url = musicUrl(value, provider);
   for (let hop = 0; hop < 6; hop++) {
     if (stopAt?.(url)) return { url, text: '' };
-    const response = await requestMusic(url, provider, signal);
+    const response = await requestMusic(url, provider, signal, retry);
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       await response.body?.cancel();
       const location = response.headers.get('location');
