@@ -41,6 +41,8 @@ export type NeteasePlaylistSong = {
   title: string;
   artist: string;
   language?: SongLanguage;
+  neteaseId?: string;
+  languageSource?: 'metadata' | 'lyrics' | 'title' | 'unknown';
 };
 
 type NeteaseTrackId = {
@@ -90,11 +92,18 @@ async function lyricLanguage(api: NeteaseApi, id: string): Promise<SongLanguage 
 }
 
 async function identifyTrackLanguages(api: NeteaseApi, tracks: NeteaseTrack[], errorMessage: string) {
-  const songs = tracks.map((track) => ({
-    ...mapTrack(track, errorMessage),
-    language:
-      explicitSongLanguage(track.language) || inferSongLanguage(typeof track.name === 'string' ? track.name : '')
-  }));
+  const songs: NeteasePlaylistSong[] = tracks.map((track) => {
+    const explicit = explicitSongLanguage(track.language);
+    const language = explicit || inferSongLanguage(typeof track.name === 'string' ? track.name : '');
+    return {
+      ...mapTrack(track, errorMessage),
+      language,
+      languageSource: explicit ? 'metadata' : language === '其他' ? 'unknown' : 'title',
+      ...(typeof track.id === 'number' && Number.isSafeInteger(track.id) && track.id > 0
+        ? { neteaseId: String(track.id) }
+        : {})
+    };
+  });
   let cursor = 0;
   const deadline = Date.now() + 8000;
   // Keep large playlists responsive: at most 80 lyric lookups, four workers,
@@ -107,11 +116,34 @@ async function identifyTrackLanguages(api: NeteaseApi, tracks: NeteaseTrack[], e
         if (explicitSongLanguage(track.language)) continue;
         if (typeof track.id !== 'number' || !Number.isSafeInteger(track.id) || track.id <= 0) continue;
         const language = await lyricLanguage(api, String(track.id));
-        if (language) songs[index].language = language;
+        if (language) {
+          songs[index].language = language;
+          songs[index].languageSource = 'lyrics';
+        }
       }
     })
   );
   return songs;
+}
+
+// Small authenticated follow-up batches cover the whole playlist without one
+// long request. Only IDs accepted; no URLs or client-supplied language evidence.
+export async function fetchNeteaseLanguageBatch(ids: string[]) {
+  if (!ids.length || ids.length > 12 || ids.some((id) => !/^[1-9]\d{0,15}$/.test(id)))
+    throw new UserFacingError('每次最多识别 12 首有效歌曲。');
+  const api = await getNeteaseApi();
+  const unique = [...new Set(ids)];
+  const results: Array<{ id: string; language?: SongLanguage }> = [];
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, unique.length) }, async () => {
+      while (cursor < unique.length) {
+        const id = unique[cursor++];
+        results.push({ id, language: await lyricLanguage(api, id) });
+      }
+    })
+  );
+  return results;
 }
 
 const getNeteaseApi = async () =>

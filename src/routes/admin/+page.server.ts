@@ -24,6 +24,8 @@ import {
 } from '$lib/server/form-schemas';
 import { fetchMusicTracks, fetchSharedMusic } from '$lib/server/music-import';
 import { musicProviderLabel } from '$lib/music-import';
+import { fetchNeteaseLanguageBatch } from '$lib/server/netease';
+import { consumeSharedRateLimit, rateLimitKey } from '$lib/server/rate-limit';
 import { updateRequestStatus } from '$lib/server/requests';
 import { pageSettingsKeys, saveSettingImage, saveSettings } from '$lib/server/settings';
 import {
@@ -64,6 +66,26 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
+  identifyLanguages: async ({ request, locals }) => {
+    if (!locals.streamer || !locals.isAdmin || !locals.userId) return fail(403, { adminError: '需要歌单管理权限。' });
+    try {
+      const raw = (await request.formData()).get('ids');
+      if (typeof raw !== 'string' || raw.length > 1000) return fail(400, { adminError: '歌曲 ID 无效。' });
+      const ids: unknown = JSON.parse(raw);
+      if (
+        !Array.isArray(ids) ||
+        ids.length < 1 ||
+        ids.length > 12 ||
+        ids.some((id) => typeof id !== 'string' || !/^[1-9]\d{0,15}$/.test(id))
+      )
+        return fail(400, { adminError: '每次最多识别 12 首有效歌曲。' });
+      if (!(await consumeSharedRateLimit('music-language:' + rateLimitKey(locals.userId), 500, 600_000)))
+        return fail(429, { adminError: '语言识别请求过于频繁，请稍后重试。' });
+      return { languageResults: await fetchNeteaseLanguageBatch(ids) };
+    } catch (error) {
+      return fail(400, { adminError: getErrorMessage(error) });
+    }
+  },
   saveHeader: async ({ request }) => {
     try {
       await saveHeaderText(await request.formData());

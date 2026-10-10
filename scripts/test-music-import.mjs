@@ -188,10 +188,10 @@ try {
         return { body: { code: 200, playlist: { trackIds: [{ id: 123 }] } } };
       };
       assert.deepEqual(await fetchMusicTracks('netease', '123', 'song'), [
-        { title: '测试歌曲', artist: '测试原唱', language: '中文' }
+        { title: '测试歌曲', artist: '测试原唱', language: '中文', languageSource: 'title' }
       ]);
       assert.deepEqual(await fetchMusicTracks('netease', '123', 'playlist'), [
-        { title: '测试歌曲', artist: '测试原唱', language: '中文' }
+        { title: '测试歌曲', artist: '测试原唱', language: '中文', languageSource: 'title' }
       ]);
     } finally {
       api.song_detail = originalSong;
@@ -203,6 +203,12 @@ try {
       await server.ssrLoadModule('/src/lib/language.ts');
     assert.equal(inferSongLanguage('Butter-Fly', '和田光司'), '其他');
     assert.equal(inferSongLanguage('Hello', '日本歌手'), '其他');
+    assert.equal(inferSongLanguage('别让爱凋落 (Live版)'), '中文');
+    assert.equal(
+      inferLyricLanguage('中文的歌声在这里继续响起我们共同唱着心中的愿望与梦想不断前进\nЯ люблю тебя и мы поём песню'),
+      '中文'
+    );
+    assert.equal(inferLyricLanguage('Я люблю тебя и мы поём песню снова и снова каждую ночь'), '其他');
     assert.equal(
       inferLyricLanguage('[00:00]作词：日本の作家\n[00:10]这是我们一起唱过的歌也是心中的梦想让我们一起勇敢向前走'),
       '中文'
@@ -304,6 +310,14 @@ try {
       assert.ok(peak <= 4);
       assert.equal(songs[0].language, '日语');
       assert.equal(songs[99].language, '其他');
+      const { fetchNeteaseLanguageBatch } = await server.ssrLoadModule('/src/lib/server/netease.ts');
+      assert.equal((await fetchNeteaseLanguageBatch(['991099']))[0].language, '日语');
+      assert.equal(count, 81);
+      await assert.rejects(
+        () => fetchNeteaseLanguageBatch(Array.from({ length: 13 }, (_, i) => String(100 + i))),
+        /12/
+      );
+      await assert.rejects(() => fetchNeteaseLanguageBatch(['https://evil.test/']), /有效歌曲/);
       timeout = true;
       const start = Date.now();
       assert.equal((await fetchMusicTracks('netease', '992000', 'song'))[0].language, '其他');

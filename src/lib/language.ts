@@ -8,7 +8,7 @@ const countMatches = (value: string, pattern: RegExp) => value.match(pattern)?.l
 
 // A performer name is not evidence of the language actually sung.
 export const inferSongLanguage = (title: string, _artist = ''): SongLanguage => {
-  const text = title;
+  const text = title.replace(/[（(][^()（）]*(?:live|version|remix|edit|ver\.|cover|伴奏)[^()（）]*[）)]/gi, '');
 
   if (kanaPattern.test(text)) {
     return '日语';
@@ -63,7 +63,7 @@ export function inferLyricLanguage(lyric: unknown): SongLanguage | undefined {
     .filter(
       (line) =>
         line &&
-        !/^(?:作词|作曲|编曲|演唱|歌手|制作|词|曲|翻译|译|lyricist|composer|arranger|producer|lyrics?\s*(?:by|:))\s*[:：]?/i.test(
+        !/^(?:作词|作曲|词曲|编曲|演唱|原唱|歌手|制作人?|词|曲|翻译|译|音乐总监|音响总监|音乐混音|吉他设计|live\s*弦乐|lyricist|composer|arranger|producer|lyrics?\s*(?:by|:))\s*[:：]/i.test(
           line
         )
     )
@@ -77,8 +77,9 @@ export function inferLyricLanguage(lyric: unknown): SongLanguage | undefined {
   if (total < 20) return undefined;
   // Japanese lyrics naturally include kanji and occasional English choruses.
   if (kana >= 8 && kana / total >= 0.15 && other / total < 0.2) return '日语';
-  if (other / total >= 0.3) return '其他';
-  if (kana === 0 && cjk >= 10 && cjk / total >= 0.6) return '中文';
+  // Mixed performances follow their dominant language, not any foreign verse.
+  if (kana === 0 && cjk >= 10 && cjk / total > 0.5) return '中文';
+  if (other / total >= 0.6) return '其他';
   // Latin script alone does not distinguish English from French or romanized Japanese.
   const words = text.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || [];
   const english = new Set([

@@ -95,6 +95,29 @@ try {
   });
   const aCookie = await login('siro0@local.test', '/s/siro0/admin/login');
   const bCookie = await login('xunxuntu@local.test', '/s/xunxuntu/admin/login');
+  await test('language batches require streamer authorization and reject oversized or forged song IDs', async () => {
+    const path = '/s/siro0/admin?/identifyLanguages';
+    assert.equal((await form(path, { ids: '["123"]' })).status, 303);
+    assert.equal((await form(path, { ids: '["123"]' }, bCookie)).status, 403);
+    for (const ids of [
+      '["https://127.0.0.1/secret"]',
+      '[]',
+      JSON.stringify(Array.from({ length: 13 }, (_, i) => String(i + 1))),
+      'null'
+    ])
+      assert.equal((await form(path, { ids }, aCookie)).status, 400);
+    const api = (await import('@neteasecloudmusicapienhanced/api')).default;
+    const originalLyric = api.lyric;
+    try {
+      api.lyric = async () => ({
+        body: { code: 200, lrc: { lyric: 'I love you and you are in my heart we are together and this is our love' } }
+      });
+      const response = await form(path, { ids: '["998001"]' }, aCookie);
+      assert.equal(response.status, 200);
+    } finally {
+      api.lyric = originalLyric;
+    }
+  });
   const platformCookie = await login('platform@local.test');
   await test('authenticated dashboard is scoped; cross-streamer reads and mutations are forbidden', async () => {
     const response = await request('/s/siro0/admin', aCookie);

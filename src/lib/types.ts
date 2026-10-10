@@ -70,6 +70,8 @@ export interface ImportPreview {
     artist: string;
     language: string;
     tagsInput: string;
+    neteaseId?: string;
+    languageSource?: 'metadata' | 'lyrics' | 'title' | 'unknown';
   }>;
 }
 

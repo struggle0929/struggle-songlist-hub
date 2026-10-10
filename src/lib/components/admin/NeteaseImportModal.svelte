@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { enhance } from '$app/forms';
+  import { enhance, deserialize } from '$app/forms';
+  import { untrack } from 'svelte';
   import { createLocalPending } from '$lib/pending.svelte';
   import Icon from '$lib/components/ui/Icon.svelte';
   import Select from '$lib/components/ui/Select.svelte';
@@ -22,6 +23,69 @@
   } = $props();
 
   const submit = createLocalPending();
+  type PreviewRow = ImportPreview['songs'][number] & { manual: boolean };
+  let rows = $state<PreviewRow[]>([]);
+  let identifying = $state(false);
+  let completed = $state(0);
+  let total = $state(0);
+  let identificationError = $state('');
+  let controller: AbortController | undefined;
+  $effect(() => {
+    rows = preview.songs.map((song) => ({ ...song, manual: false }));
+    const list = untrack(() => rows);
+    completed = 0;
+    identificationError = '';
+    const candidates =
+      (preview.provider ?? 'netease') === 'netease'
+        ? untrack(() =>
+            list.filter(
+              (song) => song.neteaseId && song.languageSource !== 'lyrics' && song.languageSource !== 'metadata'
+            )
+          )
+        : [];
+    total = candidates.length;
+    const abort = new AbortController();
+    controller = abort;
+    identifying = candidates.length > 0;
+    void (async () => {
+      try {
+        for (let i = 0; i < candidates.length && !abort.signal.aborted; i += 12) {
+          const batch = candidates.slice(i, i + 12);
+          const body = new FormData();
+          body.set('ids', JSON.stringify(batch.map((song) => song.neteaseId)));
+          const response = await fetch('?/identifyLanguages', {
+            method: 'POST',
+            body,
+            signal: abort.signal,
+            headers: { 'x-sveltekit-action': 'true' }
+          });
+          const result = deserialize(await response.text());
+          if (result.type !== 'success' || !Array.isArray(result.data?.languageResults))
+            throw new Error('歌词识别暂时中断，可重新打开预览重试，或手动核对后导入。');
+          for (const item of result.data.languageResults as Array<{ id: string; language?: string }>) {
+            if (!item.language) continue;
+            for (const song of list) {
+              if (song.neteaseId === item.id && !song.manual) {
+                song.language = item.language;
+                song.languageSource = 'lyrics';
+              }
+            }
+          }
+          completed += batch.length;
+        }
+      } catch (error) {
+        if (!abort.signal.aborted)
+          identificationError = error instanceof Error ? error.message : '歌词识别暂时不可用。';
+      } finally {
+        if (!abort.signal.aborted) identifying = false;
+      }
+    })();
+    return () => abort.abort();
+  });
+  function stopIdentification() {
+    controller?.abort();
+    identifying = false;
+  }
 </script>
 
 <Dialog.Root
@@ -66,7 +130,17 @@
           class="rounded-[18px] border border-[var(--color-accent-surface-border)] bg-[var(--color-accent-surface-bg)] px-4 py-3 text-sm text-[var(--color-text-secondary)]"
         >
           <p class="font-medium text-[var(--color-text)]">{preview.songs.length} 首待确认</p>
-          <p class="mt-1 text-xs">语言优先参考平台信息与可获取的原文歌词。无法确定时归为“其他”，导入前请核对。</p>
+          <p class="mt-1 text-xs">混合语言歌曲按主要演唱语言判断。“待核对”表示依据不足，手动修改不会被自动识别覆盖。</p>
+          {#if total > 0}
+            <p class="mt-2 text-xs" aria-live="polite">
+              {identifying ? '正在补充歌词识别' : '歌词识别进度'}：{completed}/{total}
+            </p>
+          {/if}
+          {#if identifying}
+            <button type="button" class="mt-2 text-xs underline" onclick={stopIdentification}>停止识别，手动核对</button
+            >
+          {/if}
+          {#if identificationError}<p class="mt-2 text-xs">{identificationError}</p>{/if}
         </div>
 
         <div class="max-h-[56vh] overflow-auto rounded-[18px] border border-[var(--color-border-soft)]">
@@ -83,7 +157,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-[var(--color-border-soft)] bg-[var(--color-surface)]">
-              {#each preview.songs as song, index}
+              {#each rows as song, index}
                 <tr>
                   <td class="px-3 py-3 align-middle">
                     <div class="flex justify-center">
@@ -104,10 +178,27 @@
                     <Select
                       name="songLanguage"
                       required
-                      value={song.language}
+                      bind:value={
+                        () => song.language,
+                        (value) => {
+                          song.language = value ?? '其他';
+                          song.manual = true;
+                        }
+                      }
                       items={songLanguageItems}
                       triggerClass="form-field-muted min-w-28"
                     />
+                    <p class="mt-1 text-xs text-[var(--color-text-muted)]">
+                      {song.manual
+                        ? '手动选择'
+                        : song.languageSource === 'lyrics'
+                          ? '歌词识别'
+                          : song.languageSource === 'metadata'
+                            ? '平台信息'
+                            : song.languageSource === 'title'
+                              ? '歌名推测'
+                              : '待核对'}
+                    </p>
                   </td>
                   <td class="px-3 py-3">
                     <input
@@ -126,7 +217,7 @@
         <button
           type="submit"
           class="button button-primary button-full"
-          disabled={submit.pending}
+          disabled={submit.pending || identifying}
           data-pending={submit.pending || undefined}
         >
           导入勾选歌曲
