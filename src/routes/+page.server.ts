@@ -39,7 +39,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       ? []
       : (await listStreamers()).map((s) => ({
           ...s,
-          href: streamerUrl(s.slug, url, env.PUBLIC_ROOT_DOMAIN || 'xs0929.cn')
+          href: streamerUrl(s.slug, url, env.PUBLIC_ROOT_DOMAIN || 'songlist.top')
         }))
   };
 };

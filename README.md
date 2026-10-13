@@ -2,24 +2,24 @@
 
 多主播共用歌单，基于 SvelteKit、Svelte 和 Supabase。**一个 Vercel 项目 + 一个 Supabase 项目 + 按主播子域名分流**，程序部署一次，所有主播共同更新。
 
-当前版本 `0.2.0`：已实现多主播隔离、账号授权、平台创建歌单、独立页面配置和按主播备份恢复，完成本地测试。线上迁移、Vercel 绑定和 xs0929.cn DNS 尚未执行。
+当前版本 `0.2.0`：已实现多主播隔离、账号授权、平台创建歌单、独立页面配置和按主播备份恢复，完成本地测试。生产主域名为 songlist.top，主播通过独立子域名访问。
 
 ## 域名与入口
 
 主播名称前置，使用稳定英文标识作为子域名，显示昵称可单独修改。
 
-| 入口           | 正式地址示例                                    |
-| -------------- | ----------------------------------------------- |
-| 平台目录       | `https://xs0929.cn/`                            |
-| Siro0 歌单     | `https://siro0.xs0929.cn/`                      |
-| Siro0 登录     | `https://siro0.xs0929.cn/admin/login`           |
-| Siro0 后台     | `https://siro0.xs0929.cn/admin`                 |
-| Siro0 备份接口 | `https://siro0.xs0929.cn/admin/database/export` |
-| 薰薰兔歌单     | `https://xunxuntu.xs0929.cn/`                   |
-| 平台登录       | `https://xs0929.cn/admin/login`                 |
-| 主播与账号管理 | `https://xs0929.cn/admin/streamers`             |
+| 入口           | 正式地址示例                                       |
+| -------------- | -------------------------------------------------- |
+| 平台目录       | `https://songlist.top/`                            |
+| Siro0 歌单     | `https://siro0.songlist.top/`                      |
+| Siro0 登录     | `https://siro0.songlist.top/admin/login`           |
+| Siro0 后台     | `https://siro0.songlist.top/admin`                 |
+| Siro0 备份接口 | `https://siro0.songlist.top/admin/database/export` |
+| 薰薰兔歌单     | `https://xunxuntu.songlist.top/`                   |
+| 平台登录       | `https://songlist.top/admin/login`                 |
+| 主播与账号管理 | `https://songlist.top/admin/streamers`             |
 
-`https://siro0/xs0929.cn` 会将 siro0 当作主机名，不能作为 xs0929.cn 的子域名。正确格式为 `https://siro0.xs0929.cn`。
+`https://siro0/songlist.top` 会将 siro0 当作主机名，不能作为 songlist.top 的子域名。正确格式为 `https://siro0.songlist.top`。
 
 本地支持 `http://siro0.localhost:5173/`，同时提供 `/s/siro0` 路径入口，便于不支持 localhost 子域名的环境和 Vercel 预览测试。正式分发地址优先使用子域名。
 
@@ -94,7 +94,7 @@ npm run dev:local
 | `PUBLIC_SUPABASE_PUBLISHABLE_KEY`   | 可公开的 publishable key             |
 | `SUPABASE_SECRET_KEY`               | 仅服务端使用的 secret key            |
 | `AUTH_SECRET`                       | 会话签名随机串，生产建议至少 32 字节 |
-| `PUBLIC_ROOT_DOMAIN`                | 子域名主域，默认 xs0929.cn           |
+| `PUBLIC_ROOT_DOMAIN`                | 子域名主域，默认 songlist.top        |
 | `PUBLIC_SITE_*` / `PUBLIC_CURSOR_*` | 平台品牌和指针默认值，主播设置优先   |
 | `LOCAL_DEMO`                        | 原有只读演示，仅开发模式生效         |
 

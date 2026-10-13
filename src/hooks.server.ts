@@ -27,7 +27,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     securityHeaders(response.headers);
     return response;
   }
-  const host = hostSlug(event.url.hostname, env.PUBLIC_ROOT_DOMAIN || 'xs0929.cn');
+  const host = hostSlug(event.url.hostname, env.PUBLIC_ROOT_DOMAIN || 'songlist.top');
   if (host && path.slug && host !== path.slug) error(400, '主播子域名和路径不一致。');
   if (path.slug && !validSlug(path.slug)) error(404, '主播不存在。');
   const slug = host || path.slug;

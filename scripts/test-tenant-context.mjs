@@ -67,23 +67,29 @@ try {
       });
   });
   await test('subdomain parser validates root boundaries, reserved names and stable slugs', async () => {
-    assert.equal(routes.hostSlug('siro0.xs0929.cn', 'xs0929.cn'), 'siro0');
-    assert.equal(routes.hostSlug('SIRO0.XS0929.CN.', 'xs0929.cn'), 'siro0');
-    assert.equal(routes.hostSlug('siro0.localhost', 'xs0929.cn'), 'siro0');
-    for (const host of ['siro0.xs0929.cn.evil.test', 'a.b.xs0929.cn', 'admin.xs0929.cn', '-bad.xs0929.cn', 'xs0929.cn'])
-      assert.equal(routes.hostSlug(host, 'xs0929.cn'), null);
+    assert.equal(routes.hostSlug('siro0.songlist.top', 'songlist.top'), 'siro0');
+    assert.equal(routes.hostSlug('SIRO0.SONGLIST.TOP.', 'songlist.top'), 'siro0');
+    assert.equal(routes.hostSlug('siro0.localhost', 'songlist.top'), 'siro0');
+    for (const host of [
+      'siro0.songlist.top.evil.test',
+      'a.b.songlist.top',
+      'admin.songlist.top',
+      '-bad.songlist.top',
+      'songlist.top'
+    ])
+      assert.equal(routes.hostSlug(host, 'songlist.top'), null);
     assert.equal(routes.validSlug('中文主播'), false);
   });
   await test('production entries keep nickname first while preview URLs use the supported fallback', async () => {
     assert.equal(
-      routes.streamerUrl('siro0', new URL('https://xs0929.cn'), 'xs0929.cn', '/admin'),
-      'https://siro0.xs0929.cn/admin'
+      routes.streamerUrl('siro0', new URL('https://songlist.top'), 'songlist.top', '/admin'),
+      'https://siro0.songlist.top/admin'
     );
     assert.equal(
-      routes.streamerUrl('siro0', new URL('http://localhost:5173'), 'xs0929.cn'),
+      routes.streamerUrl('siro0', new URL('http://localhost:5173'), 'songlist.top'),
       'http://siro0.localhost:5173/'
     );
-    assert.equal(routes.streamerUrl('siro0', new URL('https://preview.vercel.app'), 'xs0929.cn'), '/s/siro0/');
+    assert.equal(routes.streamerUrl('siro0', new URL('https://preview.vercel.app'), 'songlist.top'), '/s/siro0/');
   });
   console.log(`${passed} context and routing tests passed.`);
 } finally {

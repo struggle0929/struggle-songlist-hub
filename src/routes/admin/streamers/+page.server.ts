@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ url }) => {
   return {
     streamers: streamers.map((s) => ({
       ...s,
-      href: streamerUrl(s.slug, url, env.PUBLIC_ROOT_DOMAIN || 'xs0929.cn', '/admin')
+      href: streamerUrl(s.slug, url, env.PUBLIC_ROOT_DOMAIN || 'songlist.top', '/admin')
     })),
     members,
     ...accountResult
