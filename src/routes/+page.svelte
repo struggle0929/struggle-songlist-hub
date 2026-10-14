@@ -71,7 +71,13 @@
         onRandomSong={selectRandomSong}
       />
 
-      <SongTable songs={sortedSongs} bind:titleSortDirection bind:selectedSongId {randomSelectionVersion} />
+      <SongTable
+        songs={sortedSongs}
+        bind:titleSortDirection
+        bind:selectedSongId
+        {randomSelectionVersion}
+        requestPrefix={data.catalog.settings.appearance.requestPrefix}
+      />
     </section>
 
     <RequestForm {form} />

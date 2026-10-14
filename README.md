@@ -74,6 +74,8 @@ npm run dev:local
 - 真实账号会话与每次请求重新授权；平台管理员和主播管理员分离。
 - 歌曲、愿望、统计、标签、设置、素材、导入导出、重置和恢复全部按主播隔离。
 - 各主播独立浏览器标题、网页描述与首页说明，在页面配置中设置，留空使用默认值。
+- 页面设置将常用主播资料直接展示，文字与图标、鼠标指针、点歌复制格式默认折叠，统一通过底部固定按钮保存。
+- 各主播可设置点歌复制前缀（最多 20 字），留空使用“点歌”；点击歌曲、键盘选择与随机点歌均复制“前缀 + 一个空格 + 完整歌名”，备份恢复保留该配置。
 - v2 备份包含来源主播信息，兼容 v1 旧歌单备份；导入目标由当前授权歌单决定，不信任备份中的主播 ID。
 
 一次更新程序覆盖同一部署的全部主播；新增主播在后台创建记录和授权即可。数据库结构变更仍需对共享项目执行对应迁移。
@@ -102,16 +104,17 @@ npm run dev:local
 
 ## 验证命令
 
-| 命令                                                                          | 用途                                                |
-| ----------------------------------------------------------------------------- | --------------------------------------------------- |
-| `npm run check`                                                               | TypeScript 与 Svelte 检查                           |
-| `npm run build`                                                               | 生产构建                                            |
-| `npm run test:appearance` / `test:backup` / `test:tags` / `test:music-import` | 功能回归（含网易云超时）                            |
-| `npm run test:tenants`                                                        | 上下文、PostgreSQL、HTTP 和浏览器多主播测试         |
-| `npm run test:tenant-context`                                                 | 并发上下文、素材路径、域名边界                      |
-| `npm run test:tenant-sql`                                                     | 迁移、事务、RLS 和跨主播约束                        |
-| `npm run test:tenant-http`                                                    | 实际本地页面、账号权限及管理接口                    |
-| `npm run test:tenant-ui`                                                      | 浏览器登录、配置、素材上传、备份恢复、桌面/手机布局 |
+| 命令                                                                          | 用途                                                               |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `npm run check`                                                               | TypeScript 与 Svelte 检查                                          |
+| `npm run build`                                                               | 生产构建                                                           |
+| `npm run test:appearance` / `test:backup` / `test:tags` / `test:music-import` | 功能回归（含网易云超时）                                           |
+| `npm run test:page-settings`                                                  | 页面设置保存、主播隔离、复制格式及移动端布局（使用本地测试数据库） |
+| `npm run test:tenants`                                                        | 上下文、PostgreSQL、HTTP 和浏览器多主播测试                        |
+| `npm run test:tenant-context`                                                 | 并发上下文、素材路径、域名边界                                     |
+| `npm run test:tenant-sql`                                                     | 迁移、事务、RLS 和跨主播约束                                       |
+| `npm run test:tenant-http`                                                    | 实际本地页面、账号权限及管理接口                                   |
+| `npm run test:tenant-ui`                                                      | 浏览器登录、配置、素材上传、备份恢复、桌面/手机布局                |
 
 浏览器测试默认使用已安装的 Microsoft Edge；也可设置 PLAYWRIGHT_CHANNEL=chrome，或安装 Playwright Chromium 后设为 chromium。测试自动启动隔离服务，无需运行 dev:local。SQL/HTTP/UI 测试分别使用内存库，HTTP 和 UI 端口为 5193、5194，不改动实验环境的 5173 数据。
 

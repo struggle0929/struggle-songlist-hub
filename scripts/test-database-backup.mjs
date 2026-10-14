@@ -28,6 +28,7 @@ const request = {
   created_at: '2026-09-05T00:00:00.000Z'
 };
 const initialAppearance = JSON.stringify({
+  requestPrefix: '我要听',
   logo: 'appearance/old.png',
   favicon: '',
   mode: 'system',
@@ -105,6 +106,14 @@ const server = await createServer({
 });
 
 let passed = 0;
+let tenant;
+const context = {
+  streamer: { id: '00000000-0000-4000-8000-000000000001', slug: 'siro0', name: 'Siro0', enabled: true },
+  userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  isAdmin: true,
+  isPlatformAdmin: false,
+  base: ''
+};
 async function test(name, run) {
   state.pages = [];
   state.files.clear();
@@ -119,20 +128,13 @@ async function test(name, run) {
     bilibili_url: 'https://bilibili.com',
     appearance: initialAppearance
   };
-  await run();
+  await tenant.tenantContext.run(context, run);
   passed++;
   console.log('PASS', name);
 }
 
 try {
-  const tenant = await server.ssrLoadModule('/src/lib/server/tenant.ts');
-  tenant.tenantContext.enterWith({
-    streamer: { id: '00000000-0000-4000-8000-000000000001', slug: 'siro0', name: 'Siro0', enabled: true },
-    userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    isAdmin: true,
-    isPlatformAdmin: false,
-    base: ''
-  });
+  tenant = await server.ssrLoadModule('/src/lib/server/tenant.ts');
   const shared = await server.ssrLoadModule('/src/lib/database-backup.ts');
   const service = await server.ssrLoadModule('/src/lib/server/database-backup.ts');
   const settingsRows = Object.entries(state.settings).map(([key, value]) => ({ key, value }));
@@ -210,6 +212,7 @@ try {
     const result = await service.completeImport({ restoreId: prepared.restoreId, data, assets: prepared.uploads });
     assert.deepEqual(result, { songs: 1, requests: 1, assets: 2 });
     assert.equal(state.rpc.name, 'restore_admin_data');
+    assert.equal(JSON.parse(state.rpc.args.p_settings.appearance).requestPrefix, '我要听');
     assert.ok(
       state.rpc.args.p_settings.avatar_path.startsWith(
         `00000000-0000-4000-8000-000000000001/restores/${prepared.restoreId}/`
